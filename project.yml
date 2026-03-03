@@ -1,0 +1,30 @@
+name: Uncommit
+options:
+  bundleIdPrefix: com.uncommit
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+targets:
+  Uncommit:
+    type: application
+    platform: macOS
+    sources:
+      - path: Uncommit
+    settings:
+      base:
+        INFOPLIST_FILE: Uncommit/Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.uncommit.app
+        PRODUCT_NAME: Uncommit
+        CODE_SIGN_ENTITLEMENTS: ""
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: "NO"
+        ENABLE_APP_SANDBOX: "NO"
+        SWIFT_STRICT_CONCURRENCY: complete
