@@ -3,6 +3,7 @@ import SwiftUI
 struct PopoverContentView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var showingSettings = false
+    @State private var searchText = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,7 +59,31 @@ struct PopoverContentView: View {
             } else if viewModel.repositories.isEmpty {
                 EmptyStateView()
             } else {
-                RepoListView()
+                // Search bar
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                    TextField("Search repositories…", text: $searchText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12))
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                                .font(.system(size: 12))
+                        }
+                        .buttonStyle(.borderless)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+
+                Divider()
+
+                RepoListView(searchText: searchText)
             }
         }
         .frame(minWidth: 380, maxWidth: 380, minHeight: 200, maxHeight: 550)
