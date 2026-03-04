@@ -105,6 +105,14 @@ enum EditorHelper {
         return InstalledApp(id: bundleId, name: name, bundleURL: url)
     }
 
+    /// Returns the app icon for a given bundle ID, or nil if the app is not installed.
+    static func appIcon(for bundleId: String) -> NSImage? {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+            return nil
+        }
+        return NSWorkspace.shared.icon(forFile: url.path)
+    }
+
     // MARK: - Private
 
     private static func appName(at url: URL) -> String? {

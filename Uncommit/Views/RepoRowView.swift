@@ -119,8 +119,15 @@ struct RepoRowView: View {
                     Button {
                         EditorHelper.openInEditor(path: repo.path, bundleId: editorId)
                     } label: {
-                        Image(systemName: "curlybraces")
-                            .font(.caption)
+                        if let icon = EditorHelper.appIcon(for: editorId) {
+                            Image(nsImage: icon)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 14, height: 14)
+                        } else {
+                            Image(systemName: "curlybraces")
+                                .font(.caption)
+                        }
                     }
                     .buttonStyle(.borderless)
                     .help("Open in \(EditorHelper.editorName(for: editorId) ?? "Editor")")
