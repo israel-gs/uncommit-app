@@ -27,6 +27,13 @@ struct GitRepository: Identifiable, Codable, Hashable {
     }
 
     static func == (lhs: GitRepository, rhs: GitRepository) -> Bool {
-        lhs.id == rhs.id
+        lhs.id == rhs.id &&
+        lhs.path == rhs.path &&
+        lhs.displayName == rhs.displayName &&
+        lhs.customEditorBundleId == rhs.customEditorBundleId &&
+        lhs.status == rhs.status &&
+        lhs.lastChecked == rhs.lastChecked &&
+        lhs.isCheckingRemote == rhs.isCheckingRemote &&
+        lhs.error == rhs.error
     }
 }

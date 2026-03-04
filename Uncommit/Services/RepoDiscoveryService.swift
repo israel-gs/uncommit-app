@@ -32,7 +32,9 @@ struct RepoDiscoveryService {
 
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: gitDir.path, isDirectory: &isDirectory) {
-            results.append(url.path)
+            // Resolve symlinks so paths always match the canonical form
+            // used by AppViewModel (prevents "Checking..." stuck states).
+            results.append(url.resolvingSymlinksInPath().path)
             return // Don't descend into git repos
         }
 

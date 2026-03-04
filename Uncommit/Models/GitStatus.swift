@@ -6,14 +6,14 @@ struct GitRepoStatus: Equatable {
     let modifiedFiles: [String]
     let untrackedFiles: [String]
     let conflictFiles: [String]
+    /// Accurate counts (file arrays may be capped for display purposes).
+    let stagedCount: Int
+    let modifiedCount: Int
+    let untrackedCount: Int
+    let conflictCount: Int
     let aheadCount: Int
     let behindCount: Int
     let hasRemoteTrackingBranch: Bool
-
-    var stagedCount: Int { stagedFiles.count }
-    var modifiedCount: Int { modifiedFiles.count }
-    var untrackedCount: Int { untrackedFiles.count }
-    var conflictCount: Int { conflictFiles.count }
 
     var totalChangedFiles: Int {
         stagedCount + modifiedCount + untrackedCount + conflictCount

@@ -1,6 +1,13 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.uncommit.app", category: "GitService")
 
 enum GitService {
+
+    /// Maximum file names to retain per category for display.
+    /// Counts are always accurate; only the name list is truncated.
+    private static let maxFileNamesPerCategory = 50
 
     static func currentBranch(at repoPath: String) async throws -> String {
         let result = try await ShellExecutor.run(
@@ -49,7 +56,12 @@ enum GitService {
             }
         }
 
-        return (staged, modified, untracked, conflicts)
+        return (capFiles(staged), capFiles(modified), capFiles(untracked), capFiles(conflicts))
+    }
+
+    private static func capFiles(_ files: [String]) -> [String] {
+        guard files.count > maxFileNamesPerCategory else { return files }
+        return Array(files.prefix(maxFileNamesPerCategory)) + ["... and \(files.count - maxFileNamesPerCategory) more"]
     }
 
     static func aheadBehind(at repoPath: String) async throws -> (ahead: Int, behind: Int, hasTracking: Bool) {
@@ -75,32 +87,55 @@ enum GitService {
     }
 
     static func fetch(at repoPath: String) async throws {
+        let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
+        logger.debug("🌐 fetch START — \(shortName)")
+        let start = CFAbsoluteTimeGetCurrent()
         _ = try await ShellExecutor.run(
             "git", arguments: ["fetch", "--all", "--prune"],
             workingDirectory: repoPath,
             timeout: 30
         )
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        logger.debug("🌐 fetch DONE  — \(shortName) [\(String(format: "%.2f", elapsed))s]")
     }
 
-    /// Runs all status checks sequentially. Returns Result to never throw.
+    /// Runs all status checks in parallel. Returns Result to never throw.
     static func fullStatus(at repoPath: String) async -> Result<GitRepoStatus, Error> {
+        let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
+        let start = CFAbsoluteTimeGetCurrent()
+        logger.debug("📋 fullStatus START — \(shortName)")
+
         do {
-            let branch = try await currentBranch(at: repoPath)
-            let (staged, modified, untracked, conflicts) = try await localStatus(at: repoPath)
-            let (ahead, behind, hasTracking) = try await aheadBehind(at: repoPath)
+            // Run independent git commands in parallel
+            async let branch = currentBranch(at: repoPath)
+            async let local = localStatus(at: repoPath)
+            async let remote = aheadBehind(at: repoPath)
+
+            let branchName = try await branch
+            let (staged, modified, untracked, conflicts) = try await local
+            let (ahead, behind, hasTracking) = try await remote
+
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+            logger.debug("📋 fullStatus DONE  — \(shortName) branch=\(branchName) staged=\(staged.count) mod=\(modified.count) untracked=\(untracked.count) ahead=\(ahead) behind=\(behind) [\(String(format: "%.2f", elapsed))s]")
 
             let status = GitRepoStatus(
-                branchName: branch,
+                branchName: branchName,
                 stagedFiles: staged,
                 modifiedFiles: modified,
                 untrackedFiles: untracked,
                 conflictFiles: conflicts,
+                stagedCount: staged.count,
+                modifiedCount: modified.count,
+                untrackedCount: untracked.count,
+                conflictCount: conflicts.count,
                 aheadCount: ahead,
                 behindCount: behind,
                 hasRemoteTrackingBranch: hasTracking
             )
             return .success(status)
         } catch {
+            let elapsed = CFAbsoluteTimeGetCurrent() - start
+            logger.error("📋 fullStatus FAIL  — \(shortName) [\(String(format: "%.2f", elapsed))s] \(error.localizedDescription)")
             return .failure(error)
         }
     }

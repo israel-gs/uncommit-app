@@ -70,7 +70,7 @@ struct RepoRowView: View {
                     .foregroundStyle(.red)
                     .lineLimit(2)
             } else {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     ProgressView()
                         .scaleEffect(0.5)
                         .frame(width: 10, height: 10)

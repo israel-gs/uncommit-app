@@ -35,6 +35,7 @@ struct PopoverContentView: View {
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.borderless)
+                .disabled(viewModel.isCheckingAllRemotes)
                 .help("Fetch all remotes")
 
                 Button {

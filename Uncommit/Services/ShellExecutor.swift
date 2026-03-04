@@ -1,4 +1,7 @@
 import Foundation
+import os
+
+private let logger = Logger(subsystem: "com.uncommit.app", category: "ShellExecutor")
 
 enum ShellError: Error, LocalizedError {
     case processError(exitCode: Int32, stderr: String)
@@ -72,7 +75,13 @@ enum ShellExecutor {
         workingDirectory: String,
         timeout: TimeInterval = 10
     ) async throws -> String {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let shortDir = URL(fileURLWithPath: workingDirectory).lastPathComponent
+        let argsSummary = arguments.joined(separator: " ")
+        logger.debug("▶ \(command) \(argsSummary) [dir: \(shortDir)]")
+
         guard FileManager.default.fileExists(atPath: workingDirectory) else {
+            logger.error("✗ Invalid directory: \(workingDirectory)")
             throw ShellError.invalidWorkingDirectory(workingDirectory)
         }
 
@@ -120,12 +129,16 @@ enum ShellExecutor {
                 let finalErr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
                 if !finalErr.isEmpty { stderrBuffer.append(finalErr) }
 
+                let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                 if proc.terminationStatus == 0 {
+                    logger.debug("✓ \(command) \(argsSummary) done [\(String(format: "%.2f", elapsed))s]")
                     box.resume(returning: stdoutBuffer.toString())
                 } else {
+                    let stderr = stderrBuffer.toString()
+                    logger.warning("✗ \(command) \(argsSummary) exit=\(proc.terminationStatus) [\(String(format: "%.2f", elapsed))s] stderr: \(stderr)")
                     box.resume(throwing: ShellError.processError(
                         exitCode: proc.terminationStatus,
-                        stderr: stderrBuffer.toString()
+                        stderr: stderr
                     ))
                 }
             }
@@ -133,6 +146,7 @@ enum ShellExecutor {
             do {
                 try process.run()
             } catch {
+                logger.error("✗ Failed to launch \(command): \(error.localizedDescription)")
                 stdoutPipe.fileHandleForReading.readabilityHandler = nil
                 stderrPipe.fileHandleForReading.readabilityHandler = nil
                 box.resume(throwing: error)
@@ -142,8 +156,15 @@ enum ShellExecutor {
             // Timeout: kill process if it's still running
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [process] in
                 if process.isRunning {
+                    logger.warning("⏱ Timeout (\(timeout)s) — sending SIGTERM to \(command) \(argsSummary)")
                     process.terminate()
-                    // terminationHandler will fire and resume the continuation
+                    // If still alive after 2s (git ignoring SIGTERM), force kill
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+                        if process.isRunning {
+                            logger.warning("⏱ SIGTERM ignored — sending SIGKILL to \(command) \(argsSummary)")
+                            kill(process.processIdentifier, SIGKILL)
+                        }
+                    }
                 }
             }
         }

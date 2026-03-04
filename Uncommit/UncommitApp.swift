@@ -8,7 +8,10 @@ struct UncommitApp: App {
         MenuBarExtra {
             PopoverContentView()
                 .environment(viewModel)
-                .task {
+                .onAppear {
+                    // start() has an internal guard — safe to call multiple times.
+                    // Using onAppear instead of .task to avoid SwiftUI re-triggering
+                    // when MenuBarExtra body re-evaluates (label observes repositories).
                     viewModel.start()
                 }
         } label: {
