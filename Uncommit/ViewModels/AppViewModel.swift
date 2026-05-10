@@ -6,11 +6,20 @@ private let logger = Logger(subsystem: "com.uncommit.app", category: "AppViewMod
 @Observable
 @MainActor
 final class AppViewModel {
+    // MARK: - Persistent state
     var repositories: [GitRepository] = []
     var watchedFolders: [WatchedFolder] = []
+    var configuration: AppConfiguration = AppConfiguration()
+
+    // MARK: - Transient state (split into separate dicts so a status update
+    // for one repo doesn't invalidate observers of the repository array.)
+    var statuses: [UUID: GitRepoStatus] = [:]
+    var errors: [UUID: String] = [:]
+    var checkingRemote: Set<UUID> = []
+    var lastFullRefreshAt: Date?
+
     var isRefreshing: Bool = false
     var isCheckingAllRemotes: Bool = false
-    var configuration: AppConfiguration = AppConfiguration()
     private(set) var hasStarted = false
 
     private let discoveryService = RepoDiscoveryService()
@@ -24,17 +33,34 @@ final class AppViewModel {
         URL(fileURLWithPath: path).resolvingSymlinksInPath().path
     }
 
+    private func repoId(for path: String) -> UUID? {
+        repositories.first(where: { $0.path == path })?.id
+    }
+
+    // MARK: - Per-repo accessors (used by views)
+
+    func status(for repo: GitRepository) -> GitRepoStatus? { statuses[repo.id] }
+    func error(for repo: GitRepository) -> String? { errors[repo.id] }
+    func isCheckingRemote(_ repo: GitRepository) -> Bool { checkingRemote.contains(repo.id) }
+
+    func healthLevel(for repo: GitRepository) -> RepoHealthLevel {
+        if errors[repo.id] != nil { return .error }
+        return statuses[repo.id]?.healthLevel ?? .error
+    }
+
     // MARK: - Computed
 
     var overallHealth: RepoHealthLevel {
-        if repositories.contains(where: { $0.error != nil }) { return .error }
-        let levels = repositories.compactMap { $0.status?.healthLevel }
+        if !errors.isEmpty { return .error }
+        let levels = statuses.values.map(\.healthLevel)
         if levels.isEmpty { return .clean }
         return levels.max() ?? .clean
     }
 
     var dirtyRepoCount: Int {
-        repositories.filter { $0.status?.isClean == false || $0.status?.hasUnpulledChanges == true }.count
+        statuses.values.filter {
+            !$0.isClean || $0.hasUnpulledChanges || $0.hasUnpushedChanges
+        }.count
     }
 
     var menuBarIcon: String {
@@ -113,23 +139,20 @@ final class AppViewModel {
     private func setupMonitorCallbacks() {
         monitor.onStatusUpdate = { [weak self] path, status in
             guard let self else { return }
-            if let index = self.repositories.firstIndex(where: { $0.path == path }) {
-                self.repositories[index].status = status
-                self.repositories[index].lastChecked = Date()
-                self.repositories[index].error = nil
-            } else {
+            guard let id = self.repoId(for: path) else {
                 let shortName = URL(fileURLWithPath: path).lastPathComponent
-                logger.warning("⚠️ onStatusUpdate — no matching repo for path: \(path) (\(shortName)). Known paths: \(self.repositories.map(\.path).joined(separator: ", "))")
+                logger.warning("⚠️ onStatusUpdate — no matching repo for path: \(path) (\(shortName))")
+                return
             }
+            self.statuses[id] = status
+            self.errors[id] = nil
         }
         monitor.onError = { [weak self] path, error in
-            guard let self else { return }
-            if let index = self.repositories.firstIndex(where: { $0.path == path }) {
-                self.repositories[index].error = error
-            } else {
-                let shortName = URL(fileURLWithPath: path).lastPathComponent
-                logger.warning("⚠️ onError — no matching repo for path: \(path) (\(shortName))")
-            }
+            guard let self, let id = self.repoId(for: path) else { return }
+            self.errors[id] = error
+        }
+        monitor.onCycleCompleted = { [weak self] in
+            self?.lastFullRefreshAt = Date()
         }
     }
 
@@ -161,7 +184,9 @@ final class AppViewModel {
         }
 
         // Diagnostic: report any repos still without status after a full refresh
-        let stuckRepos = repositories.filter { $0.status == nil && $0.error == nil }
+        let stuckRepos = repositories.filter {
+            statuses[$0.id] == nil && errors[$0.id] == nil
+        }
         if !stuckRepos.isEmpty {
             logger.warning("⚠️ After refreshAll, \(stuckRepos.count) repos still have no status: \(stuckRepos.map(\.displayName).joined(separator: ", "))")
         }
@@ -169,12 +194,9 @@ final class AppViewModel {
 
     func checkRemote(for repo: GitRepository) async {
         logger.info("👤 User action: Check Remote — \(repo.displayName)")
-        guard let index = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
-        repositories[index].isCheckingRemote = true
+        checkingRemote.insert(repo.id)
+        defer { checkingRemote.remove(repo.id) }
         await monitor.fetchAndCheckRemote(for: repo.path)
-        if let idx = repositories.firstIndex(where: { $0.id == repo.id }) {
-            repositories[idx].isCheckingRemote = false
-        }
     }
 
     func checkAllRemotes() async {
@@ -186,8 +208,8 @@ final class AppViewModel {
         isCheckingAllRemotes = true
         defer { isCheckingAllRemotes = false }
 
-        for i in repositories.indices {
-            repositories[i].isCheckingRemote = true
+        for repo in repositories {
+            checkingRemote.insert(repo.id)
         }
 
         let repos = repositories
@@ -208,8 +230,8 @@ final class AppViewModel {
 
             // As each completes, clear its spinner and add the next repo
             for await completedPath in group {
-                if let idx = repositories.firstIndex(where: { $0.path == completedPath }) {
-                    repositories[idx].isCheckingRemote = false
+                if let id = self.repoId(for: completedPath) {
+                    self.checkingRemote.remove(id)
                 }
 
                 if index < repos.count {
@@ -221,6 +243,42 @@ final class AppViewModel {
                     index += 1
                 }
             }
+        }
+    }
+
+    func pull(_ repo: GitRepository) async {
+        logger.info("👤 User action: Pull — \(repo.displayName)")
+        checkingRemote.insert(repo.id)
+        defer { checkingRemote.remove(repo.id) }
+        do {
+            try await GitService.pull(at: repo.path)
+            errors[repo.id] = nil
+            await refreshSingle(repo)
+        } catch {
+            errors[repo.id] = error.localizedDescription
+        }
+    }
+
+    func push(_ repo: GitRepository) async {
+        logger.info("👤 User action: Push — \(repo.displayName)")
+        checkingRemote.insert(repo.id)
+        defer { checkingRemote.remove(repo.id) }
+        do {
+            try await GitService.push(at: repo.path)
+            errors[repo.id] = nil
+            await refreshSingle(repo)
+        } catch {
+            errors[repo.id] = error.localizedDescription
+        }
+    }
+
+    private func refreshSingle(_ repo: GitRepository) async {
+        let result = await GitService.fullStatus(at: repo.path)
+        switch result {
+        case .success(let status):
+            statuses[repo.id] = status
+        case .failure(let err):
+            errors[repo.id] = err.localizedDescription
         }
     }
 
@@ -245,6 +303,7 @@ final class AppViewModel {
     func removeRepository(_ repo: GitRepository) {
         logger.info("➖ Removing repo: \(repo.displayName)")
         repositories.removeAll { $0.id == repo.id }
+        forgetTransientState(for: repo.id)
         saveAndRestartMonitor()
     }
 
@@ -273,8 +332,14 @@ final class AppViewModel {
         // The folder itself can be a repo (== match), or a parent of repos
         // (hasPrefix with trailing slash to avoid matching sibling paths
         // that share a prefix, e.g. "/foo" and "/foobar").
+        let removed = repositories.filter {
+            $0.path == folder.path || $0.path.hasPrefix(folder.path + "/")
+        }
         repositories.removeAll {
             $0.path == folder.path || $0.path.hasPrefix(folder.path + "/")
+        }
+        for repo in removed {
+            forgetTransientState(for: repo.id)
         }
         saveAndRestartMonitor()
     }
@@ -292,12 +357,31 @@ final class AppViewModel {
         saveAndRestartMonitor()
     }
 
+    private func forgetTransientState(for id: UUID) {
+        statuses[id] = nil
+        errors[id] = nil
+        checkingRemote.remove(id)
+    }
+
     // MARK: - Editor
 
     func setCustomEditor(for repo: GitRepository, bundleId: String?) {
         guard let index = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
         repositories[index].customEditorBundleId = bundleId
         saveConfiguration()
+    }
+
+    func reportEditorError(for repo: GitRepository, message: String) {
+        errors[repo.id] = message
+        let id = repo.id
+        // Auto-clear after 4s so the error doesn't linger.
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard let self else { return }
+            if self.errors[id] == message {
+                self.errors[id] = nil
+            }
+        }
     }
 
     // MARK: - Persistence

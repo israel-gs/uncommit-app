@@ -67,6 +67,21 @@ private final class ContinuationBox: Sendable {
 
 enum ShellExecutor {
 
+    /// Resolved absolute path for `git`, looked up once at first use across
+    /// the standard install locations. Skipping the `/usr/bin/env` exec for
+    /// every git call shaves overhead off the polling loop.
+    private static let resolvedGitPath: String? = {
+        let candidates = [
+            "/usr/bin/git",                  // Xcode Command Line Tools
+            "/opt/homebrew/bin/git",         // Apple Silicon Homebrew
+            "/usr/local/bin/git"             // Intel Homebrew
+        ]
+        for path in candidates where FileManager.default.isExecutableFile(atPath: path) {
+            return path
+        }
+        return nil
+    }()
+
     /// Runs a command asynchronously WITHOUT blocking any Swift concurrency threads.
     /// Uses Process.terminationHandler + readabilityHandler so nothing ever calls waitUntilExit().
     static func run(
@@ -85,6 +100,18 @@ enum ShellExecutor {
             throw ShellError.invalidWorkingDirectory(workingDirectory)
         }
 
+        // Fast path: skip `/usr/bin/env` for known commands with cached
+        // absolute paths.
+        let executablePath: String
+        let processArgs: [String]
+        if command == "git", let gitPath = resolvedGitPath {
+            executablePath = gitPath
+            processArgs = arguments
+        } else {
+            executablePath = "/usr/bin/env"
+            processArgs = [command] + arguments
+        }
+
         return try await withCheckedThrowingContinuation { continuation in
             let box = ContinuationBox(continuation)
             let stdoutBuffer = DataBuffer()
@@ -94,8 +121,8 @@ enum ShellExecutor {
             let stdoutPipe = Pipe()
             let stderrPipe = Pipe()
 
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-            process.arguments = [command] + arguments
+            process.executableURL = URL(fileURLWithPath: executablePath)
+            process.arguments = processArgs
             process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
             process.standardOutput = stdoutPipe
             process.standardError = stderrPipe

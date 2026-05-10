@@ -28,3 +28,25 @@ targets:
         CODE_SIGNING_REQUIRED: "NO"
         ENABLE_APP_SANDBOX: "NO"
         SWIFT_STRICT_CONCURRENCY: complete
+
+  UncommitTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: UncommitTests
+    dependencies:
+      - target: Uncommit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.uncommit.tests
+        SWIFT_STRICT_CONCURRENCY: complete
+
+schemes:
+  Uncommit:
+    build:
+      targets:
+        Uncommit: all
+        UncommitTests: [test]
+    test:
+      targets:
+        - UncommitTests

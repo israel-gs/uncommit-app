@@ -26,6 +26,20 @@ enum GitService {
             workingDirectory: repoPath
         )
 
+        let parsed = parsePorcelainV1Z(output)
+        return (
+            capFiles(parsed.staged),
+            capFiles(parsed.modified),
+            capFiles(parsed.untracked),
+            capFiles(parsed.conflicts)
+        )
+    }
+
+    /// Pure parser for `git status --porcelain=v1 -z` output. Extracted so it
+    /// can be unit-tested without shelling out. Returns uncapped lists.
+    static func parsePorcelainV1Z(_ output: String) -> (
+        staged: [String], modified: [String], untracked: [String], conflicts: [String]
+    ) {
         guard !output.isEmpty else {
             return ([], [], [], [])
         }
@@ -36,8 +50,8 @@ enum GitService {
         var conflicts: [String] = []
 
         // Split on NUL. The output ends with a trailing NUL, so the last entry
-        // is empty — `omittingEmptySubsequences: false` keeps it for accurate
-        // pairing of rename entries; we skip empty entries below.
+        // is empty — `omittingEmptySubsequences: false` keeps positions stable
+        // for accurate pairing of rename entries; we skip empty entries below.
         let entries = output.split(
             separator: "\0",
             omittingEmptySubsequences: false
@@ -71,7 +85,7 @@ enum GitService {
             i += isRenameOrCopy ? 2 : 1
         }
 
-        return (capFiles(staged), capFiles(modified), capFiles(untracked), capFiles(conflicts))
+        return (staged, modified, untracked, conflicts)
     }
 
     private static func capFiles(_ files: [String]) -> [String] {
@@ -112,6 +126,36 @@ enum GitService {
         )
         let elapsed = CFAbsoluteTimeGetCurrent() - start
         logger.debug("🌐 fetch DONE  — \(shortName) [\(String(format: "%.2f", elapsed))s]")
+    }
+
+    /// Pull with --ff-only. Fails if the merge isn't a fast-forward, so this
+    /// never produces a surprise merge commit. Users wanting a merge or rebase
+    /// pull should run it manually in their terminal.
+    static func pull(at repoPath: String) async throws {
+        let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
+        logger.debug("⬇️ pull START — \(shortName)")
+        let start = CFAbsoluteTimeGetCurrent()
+        _ = try await ShellExecutor.run(
+            "git", arguments: ["pull", "--ff-only"],
+            workingDirectory: repoPath,
+            timeout: 60
+        )
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        logger.debug("⬇️ pull DONE  — \(shortName) [\(String(format: "%.2f", elapsed))s]")
+    }
+
+    /// Push the current branch to its tracked remote. No --force.
+    static func push(at repoPath: String) async throws {
+        let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
+        logger.debug("⬆️ push START — \(shortName)")
+        let start = CFAbsoluteTimeGetCurrent()
+        _ = try await ShellExecutor.run(
+            "git", arguments: ["push"],
+            workingDirectory: repoPath,
+            timeout: 60
+        )
+        let elapsed = CFAbsoluteTimeGetCurrent() - start
+        logger.debug("⬆️ push DONE  — \(shortName) [\(String(format: "%.2f", elapsed))s]")
     }
 
     /// Runs all status checks in parallel. Returns Result to never throw.

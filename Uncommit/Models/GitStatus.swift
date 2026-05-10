@@ -34,15 +34,19 @@ struct GitRepoStatus: Equatable {
     var healthLevel: RepoHealthLevel {
         if hasUnpulledChanges { return .remoteOutOfSync }
         if !isClean { return .localChanges }
+        if hasUnpushedChanges { return .unpushed }
         return .clean
     }
 }
 
 enum RepoHealthLevel: Int, Comparable {
     case clean = 0
-    case localChanges = 1
-    case remoteOutOfSync = 2
-    case error = 3
+    /// Working tree is clean but the local branch has commits the remote
+    /// doesn't — your work isn't backed up yet.
+    case unpushed = 1
+    case localChanges = 2
+    case remoteOutOfSync = 3
+    case error = 4
 
     static func < (lhs: RepoHealthLevel, rhs: RepoHealthLevel) -> Bool {
         lhs.rawValue < rhs.rawValue

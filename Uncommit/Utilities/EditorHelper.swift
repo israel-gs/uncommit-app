@@ -55,12 +55,13 @@ enum EditorHelper {
     }
 
     /// Open a folder path in the given editor bundle ID.
-    static func openInEditor(path: String, bundleId: String) {
+    /// Returns `true` if the editor was found and launch was attempted, `false`
+    /// if the editor isn't installed (caller should surface an error).
+    @discardableResult
+    static func openInEditor(path: String, bundleId: String) -> Bool {
         let folderURL = URL(fileURLWithPath: path)
         guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            // Fallback: reveal in Finder if the editor is not found
-            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: path)
-            return
+            return false
         }
 
         let configuration = NSWorkspace.OpenConfiguration()
@@ -71,6 +72,7 @@ enum EditorHelper {
             withApplicationAt: appURL,
             configuration: configuration
         )
+        return true
     }
 
     /// Resolve effective editor for a repo: per-repo override > global default > nil.

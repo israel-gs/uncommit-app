@@ -12,6 +12,7 @@ struct StatusIndicatorView: View {
     private var color: Color {
         switch healthLevel {
         case .clean: return .green
+        case .unpushed: return .blue
         case .localChanges: return .orange
         case .remoteOutOfSync: return .red
         case .error: return .red.opacity(0.6)

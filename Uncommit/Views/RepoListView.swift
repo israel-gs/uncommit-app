@@ -35,8 +35,8 @@ struct RepoListView: View {
 
     private var sortedRepos: [GitRepository] {
         viewModel.repositories.sorted { a, b in
-            let aLevel = a.error != nil ? RepoHealthLevel.error : (a.status?.healthLevel ?? .error)
-            let bLevel = b.error != nil ? RepoHealthLevel.error : (b.status?.healthLevel ?? .error)
+            let aLevel = viewModel.healthLevel(for: a)
+            let bLevel = viewModel.healthLevel(for: b)
             if aLevel != bLevel {
                 return aLevel > bLevel
             }

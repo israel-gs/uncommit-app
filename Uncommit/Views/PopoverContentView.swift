@@ -11,6 +11,9 @@ struct PopoverContentView: View {
             HStack {
                 Text("Uncommit")
                     .font(.headline)
+
+                lastUpdatedLabel
+
                 Spacer()
 
                 if viewModel.isRefreshing {
@@ -87,5 +90,26 @@ struct PopoverContentView: View {
             }
         }
         .frame(minWidth: 380, maxWidth: 380, minHeight: 200, maxHeight: 550)
+    }
+
+    /// "Updated 12s ago" — refreshes once per second via TimelineView so the
+    /// label decays without observation churn on the model.
+    @ViewBuilder
+    private var lastUpdatedLabel: some View {
+        if let last = viewModel.lastFullRefreshAt {
+            TimelineView(.periodic(from: last, by: 1)) { context in
+                Text(Self.relativeLabel(from: last, to: context.date))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private static func relativeLabel(from date: Date, to now: Date) -> String {
+        let interval = max(0, now.timeIntervalSince(date))
+        if interval < 5 { return "just now" }
+        if interval < 60 { return "\(Int(interval))s ago" }
+        if interval < 3600 { return "\(Int(interval / 60))m ago" }
+        return "\(Int(interval / 3600))h ago"
     }
 }

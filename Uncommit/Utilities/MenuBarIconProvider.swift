@@ -4,6 +4,7 @@ enum MenuBarIconProvider {
     static func symbolName(for health: RepoHealthLevel) -> String {
         switch health {
         case .clean: return "checkmark.circle.fill"
+        case .unpushed: return "arrow.up.circle.fill"
         case .localChanges: return "pencil.circle.fill"
         case .remoteOutOfSync: return "arrow.triangle.2.circlepath.circle.fill"
         case .error: return "exclamationmark.triangle.fill"
@@ -13,6 +14,7 @@ enum MenuBarIconProvider {
     static func color(for health: RepoHealthLevel) -> Color {
         switch health {
         case .clean: return .green
+        case .unpushed: return .blue
         case .localChanges: return .orange
         case .remoteOutOfSync: return .red
         case .error: return .red

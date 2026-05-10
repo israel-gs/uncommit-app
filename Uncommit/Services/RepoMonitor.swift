@@ -23,6 +23,9 @@ final class RepoMonitor {
     var repositories: [GitRepository] = []
     var onStatusUpdate: (@MainActor @Sendable (String, GitRepoStatus) -> Void)?
     var onError: (@MainActor @Sendable (String, String) -> Void)?
+    /// Fired after each completed local refresh cycle so the viewmodel can
+    /// stamp `lastFullRefreshAt` for the "Updated Xs ago" display.
+    var onCycleCompleted: (@MainActor @Sendable () -> Void)?
 
     func startMonitoring(
         repos: [GitRepository],
@@ -136,6 +139,8 @@ final class RepoMonitor {
         if errorCount > 0 {
             logger.info("🔄 refreshAllLocal had \(errorCount)/\(repos.count) errors")
         }
+
+        onCycleCompleted?()
     }
 
     // MARK: - Remote Check (single repo, with dedup)
