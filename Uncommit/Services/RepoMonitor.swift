@@ -14,10 +14,6 @@ final class RepoMonitor {
     private var isCheckingRemotes = false
     /// Tracks repos currently being fetched to prevent duplicate operations.
     private var inFlightRemotePaths: Set<String> = []
-    /// Timestamp of last refresh completion — used to enforce cooldown on manual refreshes.
-    private var lastRefreshCompletedAt: CFAbsoluteTime = 0
-    /// Minimum seconds between refresh cycles (prevents rapid manual refreshes).
-    private let refreshCooldown: TimeInterval = 5
 
     /// Max concurrent local status checks (fast, CPU-bound).
     private let maxConcurrentLocal = 6
@@ -84,13 +80,6 @@ final class RepoMonitor {
             return
         }
 
-        // Cooldown: prevents rapid-fire manual refreshes.
-        let sinceLastRefresh = CFAbsoluteTimeGetCurrent() - lastRefreshCompletedAt
-        if lastRefreshCompletedAt > 0 && sinceLastRefresh < refreshCooldown {
-            logger.debug("🔄 refreshAllLocal skipped — cooldown (\(String(format: "%.1f", sinceLastRefresh))s < \(self.refreshCooldown)s)")
-            return
-        }
-
         let repos = repositories
         guard !repos.isEmpty else { return }
 
@@ -99,7 +88,6 @@ final class RepoMonitor {
         isRefreshing = true
         defer {
             isRefreshing = false
-            lastRefreshCompletedAt = CFAbsoluteTimeGetCurrent()
             let elapsed = CFAbsoluteTimeGetCurrent() - start
             logger.info("🔄 refreshAllLocal DONE — \(repos.count) repos [\(String(format: "%.2f", elapsed))s]")
         }

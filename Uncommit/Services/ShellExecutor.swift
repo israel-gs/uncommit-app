@@ -21,46 +21,46 @@ enum ShellError: Error, LocalizedError {
 }
 
 /// Thread-safe buffer to collect pipe output.
-private final class DataBuffer: @unchecked Sendable {
-    private let lock = NSLock()
-    private var data = Data()
+/// Uses OSAllocatedUnfairLock so Sendable conformance is checked at compile
+/// time instead of declared `@unchecked`.
+private final class DataBuffer: Sendable {
+    private let lock = OSAllocatedUnfairLock<Data>(initialState: Data())
 
     func append(_ chunk: Data) {
-        lock.lock()
-        data.append(chunk)
-        lock.unlock()
+        lock.withLock { $0.append(chunk) }
     }
 
     func toString() -> String {
-        lock.lock()
-        defer { lock.unlock() }
-        return String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        lock.withLock { state in
+            String(data: state, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        }
     }
 }
 
 /// Thread-safe one-shot continuation wrapper.
-private final class ContinuationBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<String, Error>?
+private final class ContinuationBox: Sendable {
+    private let lock: OSAllocatedUnfairLock<CheckedContinuation<String, Error>?>
 
     init(_ cont: CheckedContinuation<String, Error>) {
-        self.continuation = cont
+        self.lock = OSAllocatedUnfairLock(initialState: cont)
     }
 
     func resume(returning value: String) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
+        let cont = lock.withLock { state -> CheckedContinuation<String, Error>? in
+            let captured = state
+            state = nil
+            return captured
+        }
         cont?.resume(returning: value)
     }
 
     func resume(throwing error: Error) {
-        lock.lock()
-        let cont = continuation
-        continuation = nil
-        lock.unlock()
+        let cont = lock.withLock { state -> CheckedContinuation<String, Error>? in
+            let captured = state
+            state = nil
+            return captured
+        }
         cont?.resume(throwing: error)
     }
 }

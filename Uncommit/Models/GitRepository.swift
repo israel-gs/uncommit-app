@@ -26,13 +26,15 @@ struct GitRepository: Identifiable, Codable, Hashable {
         hasher.combine(id)
     }
 
+    // `lastChecked` is intentionally excluded: it changes on every refresh
+    // cycle but isn't rendered. Including it would force SwiftUI to re-diff
+    // every row on every poll even when nothing visible changed.
     static func == (lhs: GitRepository, rhs: GitRepository) -> Bool {
         lhs.id == rhs.id &&
         lhs.path == rhs.path &&
         lhs.displayName == rhs.displayName &&
         lhs.customEditorBundleId == rhs.customEditorBundleId &&
         lhs.status == rhs.status &&
-        lhs.lastChecked == rhs.lastChecked &&
         lhs.isCheckingRemote == rhs.isCheckingRemote &&
         lhs.error == rhs.error
     }

@@ -64,6 +64,19 @@ struct RepoRowView: View {
                     }
                 }
                 .font(.caption)
+
+                // Show transient errors (e.g. failed fetch) alongside the
+                // last-known status so the user knows the data may be stale.
+                if let error = repo.error {
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                        Text(error)
+                            .font(.caption2)
+                            .lineLimit(2)
+                    }
+                    .foregroundStyle(.red)
+                }
             } else if let error = repo.error {
                 Text(error)
                     .font(.caption)
@@ -149,11 +162,14 @@ struct RepoRowView: View {
     }
 
     private func openInTerminal(_ path: String) {
-        let script = "tell application \"Terminal\" to do script \"cd \(path.replacingOccurrences(of: "\"", with: "\\\""))\""
-        if let appleScript = NSAppleScript(source: script) {
-            var error: NSDictionary?
-            appleScript.executeAndReturnError(&error)
-        }
+        // Avoid AppleScript: passing the path as a string interpolation enables
+        // injection (e.g. a folder named with quotes / backslashes).
+        // `open -a Terminal <path>` opens a new Terminal window cd'd to <path>
+        // and treats <path> as a single argv entry — no shell parsing.
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = ["-a", "Terminal", path]
+        try? process.run()
     }
 }
 

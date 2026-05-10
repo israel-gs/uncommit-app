@@ -38,21 +38,11 @@ final class AppViewModel {
     }
 
     var menuBarIcon: String {
-        switch overallHealth {
-        case .clean: return "checkmark.circle.fill"
-        case .localChanges: return "pencil.circle.fill"
-        case .remoteOutOfSync: return "arrow.triangle.2.circlepath.circle.fill"
-        case .error: return "exclamationmark.triangle.fill"
-        }
+        MenuBarIconProvider.symbolName(for: overallHealth)
     }
 
     var menuBarIconColor: Color {
-        switch overallHealth {
-        case .clean: return .green
-        case .localChanges: return .orange
-        case .remoteOutOfSync: return .red
-        case .error: return .red
-        }
+        MenuBarIconProvider.color(for: overallHealth)
     }
 
     // MARK: - Lifecycle
@@ -280,7 +270,12 @@ final class AppViewModel {
 
     func removeWatchedFolder(_ folder: WatchedFolder) {
         watchedFolders.removeAll { $0.id == folder.id }
-        repositories.removeAll { $0.path.hasPrefix(folder.path + "/") }
+        // The folder itself can be a repo (== match), or a parent of repos
+        // (hasPrefix with trailing slash to avoid matching sibling paths
+        // that share a prefix, e.g. "/foo" and "/foobar").
+        repositories.removeAll {
+            $0.path == folder.path || $0.path.hasPrefix(folder.path + "/")
+        }
         saveAndRestartMonitor()
     }
 

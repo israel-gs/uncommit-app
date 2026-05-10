@@ -1,6 +1,6 @@
 import Foundation
 
-struct RepoDiscoveryService {
+struct RepoDiscoveryService: Sendable {
 
     private static let skipDirectories: Set<String> = [
         "node_modules", ".build", "Pods", "build", "DerivedData",
@@ -9,17 +9,21 @@ struct RepoDiscoveryService {
     ]
 
     func discoverRepositories(under rootPath: String, maxDepth: Int = 3) async -> [String] {
-        var results: [String] = []
-        scanDirectory(
-            URL(fileURLWithPath: rootPath),
-            currentDepth: 0,
-            maxDepth: maxDepth,
-            results: &results
-        )
-        return results.sorted()
+        // Run the recursive filesystem scan on a detached task so deep trees
+        // don't block the cooperative thread pool that other async work uses.
+        await Task.detached(priority: .userInitiated) {
+            var results: [String] = []
+            Self.scanDirectory(
+                URL(fileURLWithPath: rootPath),
+                currentDepth: 0,
+                maxDepth: maxDepth,
+                results: &results
+            )
+            return results.sorted()
+        }.value
     }
 
-    private func scanDirectory(
+    private static func scanDirectory(
         _ url: URL,
         currentDepth: Int,
         maxDepth: Int,
@@ -49,7 +53,7 @@ struct RepoDiscoveryService {
                   resourceValues.isDirectory == true else { continue }
 
             let name = child.lastPathComponent
-            if Self.skipDirectories.contains(name) { continue }
+            if skipDirectories.contains(name) { continue }
 
             scanDirectory(
                 child,

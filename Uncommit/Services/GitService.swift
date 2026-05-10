@@ -18,8 +18,11 @@ enum GitService {
     }
 
     static func localStatus(at repoPath: String) async throws -> (staged: [String], modified: [String], untracked: [String], conflicts: [String]) {
+        // Use -z so file names are NUL-delimited and never quoted/escaped.
+        // Without -z, paths with spaces, newlines, or non-ASCII are wrapped in
+        // quotes with C-style escapes that we'd have to undo by hand.
         let output = try await ShellExecutor.run(
-            "git", arguments: ["status", "--porcelain=v1"],
+            "git", arguments: ["status", "--porcelain=v1", "-z"],
             workingDirectory: repoPath
         )
 
@@ -32,19 +35,29 @@ enum GitService {
         var untracked: [String] = []
         var conflicts: [String] = []
 
-        for line in output.components(separatedBy: "\n") where line.count >= 3 {
-            let chars = Array(line)
+        // Split on NUL. The output ends with a trailing NUL, so the last entry
+        // is empty — `omittingEmptySubsequences: false` keeps it for accurate
+        // pairing of rename entries; we skip empty entries below.
+        let entries = output.split(
+            separator: "\0",
+            omittingEmptySubsequences: false
+        ).map(String.init)
+
+        var i = 0
+        while i < entries.count {
+            let entry = entries[i]
+            if entry.count < 3 {
+                i += 1
+                continue
+            }
+            let chars = Array(entry)
             let x = chars[0]
             let y = chars[1]
-            // File name starts at index 3 (after "XY ")
-            let fileName = String(line.dropFirst(3))
-            // For renames "old -> new", show just the new name
-            let displayName: String
-            if let arrowRange = fileName.range(of: " -> ") {
-                displayName = String(fileName[arrowRange.upperBound...])
-            } else {
-                displayName = fileName
-            }
+            let displayName = String(entry.dropFirst(3))
+
+            // Renames/copies emit two NUL-separated tokens: "XY new\0old\0".
+            // The new name is what we want to display; consume the old name too.
+            let isRenameOrCopy = (x == "R" || x == "C" || y == "R" || y == "C")
 
             if (x == "U" || y == "U") || (x == "A" && y == "A") || (x == "D" && y == "D") {
                 conflicts.append(displayName)
@@ -54,6 +67,8 @@ enum GitService {
                 if x != " " && x != "?" { staged.append(displayName) }
                 if y != " " && y != "?" { modified.append(displayName) }
             }
+
+            i += isRenameOrCopy ? 2 : 1
         }
 
         return (capFiles(staged), capFiles(modified), capFiles(untracked), capFiles(conflicts))
