@@ -17,6 +17,10 @@ final class AppViewModel {
     var errors: [UUID: String] = [:]
     var checkingRemote: Set<UUID> = []
     var lastFullRefreshAt: Date?
+    /// Paths reported as missing during the current refresh cycle. We collect
+    /// them here and prune at end-of-cycle to avoid mutating `repositories`
+    /// while the monitor is iterating it.
+    private var missingPaths: Set<String> = []
 
     var isRefreshing: Bool = false
     var isCheckingAllRemotes: Bool = false
@@ -35,6 +39,18 @@ final class AppViewModel {
 
     private func repoId(for path: String) -> UUID? {
         repositories.first(where: { $0.path == path })?.id
+    }
+
+    /// True only when we're confident the path is genuinely gone — not when
+    /// it's unreachable because, e.g., an external volume is unmounted. The
+    /// heuristic: if the path doesn't exist BUT its parent directory does,
+    /// the user almost certainly deleted the folder. If the parent is also
+    /// missing, the whole volume is probably away and we leave it alone.
+    private static func isPathDefinitelyMissing(_ path: String) -> Bool {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: path) { return false }
+        let parent = URL(fileURLWithPath: path).deletingLastPathComponent().path
+        return fm.fileExists(atPath: parent)
     }
 
     // MARK: - Per-repo accessors (used by views)
@@ -127,13 +143,46 @@ final class AppViewModel {
             pathsChanged = true
         }
 
-        if pathsChanged {
+        // Drop repos whose folder no longer exists on disk. This catches the
+        // common case of the user deleting a folder while the app was closed.
+        let pruned = pruneMissingRepositoriesAndFolders()
+        if pruned > 0 || pathsChanged {
             saveConfiguration()
         }
 
         logger.info("🚀 App started — \(self.repositories.count) repos, \(self.watchedFolders.count) watched folders")
         setupMonitorCallbacks()
         startMonitoring()
+    }
+
+    /// Removes repos and watched folders whose path no longer exists on disk.
+    /// Returns the number of entries removed.
+    @discardableResult
+    private func pruneMissingRepositoriesAndFolders() -> Int {
+        var removed = 0
+
+        let missingRepos = repositories.filter { Self.isPathDefinitelyMissing($0.path) }
+        for repo in missingRepos {
+            logger.info("🗑 Auto-removing missing repo: \(repo.displayName) (\(repo.path))")
+            forgetTransientState(for: repo.id)
+        }
+        if !missingRepos.isEmpty {
+            let missingIds = Set(missingRepos.map(\.id))
+            repositories.removeAll { missingIds.contains($0.id) }
+            removed += missingRepos.count
+        }
+
+        let missingFolders = watchedFolders.filter { Self.isPathDefinitelyMissing($0.path) }
+        for folder in missingFolders {
+            logger.info("🗑 Auto-removing missing watched folder: \(folder.displayName) (\(folder.path))")
+        }
+        if !missingFolders.isEmpty {
+            let missingIds = Set(missingFolders.map(\.id))
+            watchedFolders.removeAll { missingIds.contains($0.id) }
+            removed += missingFolders.count
+        }
+
+        return removed
     }
 
     private func setupMonitorCallbacks() {
@@ -148,12 +197,54 @@ final class AppViewModel {
             self.errors[id] = nil
         }
         monitor.onError = { [weak self] path, error in
-            guard let self, let id = self.repoId(for: path) else { return }
-            self.errors[id] = error
+            guard let self else { return }
+            // If the path is definitely gone (and not just unreachable due
+            // to an unmounted volume), queue it for removal at end-of-cycle.
+            if Self.isPathDefinitelyMissing(path) {
+                self.missingPaths.insert(path)
+            }
+            if let id = self.repoId(for: path) {
+                self.errors[id] = error
+            }
         }
         monitor.onCycleCompleted = { [weak self] in
-            self?.lastFullRefreshAt = Date()
+            guard let self else { return }
+            self.lastFullRefreshAt = Date()
+            self.processMissingPaths()
         }
+    }
+
+    /// Called at the end of each refresh cycle. Removes repos whose paths
+    /// went missing (and prunes any watched folder that's also gone), then
+    /// restarts the monitor with the new list.
+    private func processMissingPaths() {
+        guard !missingPaths.isEmpty else { return }
+        let paths = missingPaths
+        missingPaths.removeAll()
+
+        let toRemove = repositories.filter { paths.contains($0.path) }
+        guard !toRemove.isEmpty else { return }
+
+        for repo in toRemove {
+            logger.info("🗑 Auto-removing missing repo: \(repo.displayName) (\(repo.path))")
+            forgetTransientState(for: repo.id)
+        }
+        let removedIds = Set(toRemove.map(\.id))
+        repositories.removeAll { removedIds.contains($0.id) }
+
+        // Prune any watched folder that itself disappeared (the repos under
+        // it would already be in `paths`).
+        let fm = FileManager.default
+        let missingFolders = watchedFolders.filter { !fm.fileExists(atPath: $0.path) }
+        if !missingFolders.isEmpty {
+            for folder in missingFolders {
+                logger.info("🗑 Auto-removing missing watched folder: \(folder.displayName)")
+            }
+            let missingFolderIds = Set(missingFolders.map(\.id))
+            watchedFolders.removeAll { missingFolderIds.contains($0.id) }
+        }
+
+        saveAndRestartMonitor()
     }
 
     private func startMonitoring() {
@@ -345,6 +436,9 @@ final class AppViewModel {
     }
 
     func rescanWatchedFolders() async {
+        // Prune first so deleted folders don't linger.
+        pruneMissingRepositoriesAndFolders()
+
         for folder in watchedFolders {
             let discovered = await discoveryService.discoverRepositories(
                 under: folder.path,

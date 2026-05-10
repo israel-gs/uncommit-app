@@ -117,6 +117,10 @@ struct RepoRowView: View {
                         .help("Pull (fast-forward)")
                     }
                     if status.aheadCount > 0 {
+                        // Push will be rejected by git if the remote has new
+                        // commits we haven't pulled, so we disable it and
+                        // tell the user to pull first.
+                        let pushBlocked = status.behindCount > 0
                         Button {
                             Task { await viewModel.push(repo) }
                         } label: {
@@ -127,8 +131,10 @@ struct RepoRowView: View {
                             .font(.caption)
                         }
                         .buttonStyle(.borderless)
-                        .disabled(isCheckingRemote)
-                        .help("Push")
+                        .disabled(isCheckingRemote || pushBlocked)
+                        .help(pushBlocked
+                              ? "Pull first — remote has \(status.behindCount) new commit(s)"
+                              : "Push")
                     }
                 }
 
@@ -163,13 +169,13 @@ struct RepoRowView: View {
                 editorButton
 
                 Button {
-                    openInTerminal(repo.path)
+                    revealInFinder(repo.path)
                 } label: {
-                    Image(systemName: "terminal")
+                    Image(systemName: "folder")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
-                .help("Open in Terminal")
+                .help("Show in Finder")
             }
         }
         .padding(.horizontal, 12)
@@ -211,15 +217,9 @@ struct RepoRowView: View {
         }
     }
 
-    private func openInTerminal(_ path: String) {
-        // Avoid AppleScript: passing the path as a string interpolation enables
-        // injection (e.g. a folder named with quotes / backslashes).
-        // `open -a Terminal <path>` opens a new Terminal window cd'd to <path>
-        // and treats <path> as a single argv entry — no shell parsing.
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = ["-a", "Terminal", path]
-        try? process.run()
+    private func revealInFinder(_ path: String) {
+        // Open the folder in a Finder window showing its contents.
+        NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 }
 
