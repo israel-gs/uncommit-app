@@ -252,6 +252,16 @@ struct SettingsView: View {
                         }
                         .frame(width: 80)
                     }
+
+                    Toggle(isOn: Binding(
+                        get: { viewModel.configuration.launchAtLogin },
+                        set: { viewModel.setLaunchAtLogin($0) }
+                    )) {
+                        Text("Launch at login")
+                            .font(.callout)
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
                 }
 
                 Divider()

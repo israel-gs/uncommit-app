@@ -150,9 +150,26 @@ final class AppViewModel {
             saveConfiguration()
         }
 
+        // Reconcile persisted preference with the actual system login-item
+        // state, in case the user changed it from System Settings directly.
+        let systemEnabled = LaunchAtLoginHelper.isEnabled
+        if configuration.launchAtLogin != systemEnabled {
+            configuration.launchAtLogin = systemEnabled
+            saveConfiguration()
+        }
+
         logger.info("🚀 App started — \(self.repositories.count) repos, \(self.watchedFolders.count) watched folders")
         setupMonitorCallbacks()
         startMonitoring()
+    }
+
+    // MARK: - Launch at Login
+
+    func setLaunchAtLogin(_ enabled: Bool) {
+        logger.info("👤 User action: Launch at login → \(enabled)")
+        let result = LaunchAtLoginHelper.setEnabled(enabled)
+        configuration.launchAtLogin = result
+        saveConfiguration()
     }
 
     /// Removes repos and watched folders whose path no longer exists on disk.

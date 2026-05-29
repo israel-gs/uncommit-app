@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		067187C9CB7B0C376EA9AC18 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1753A0750C0A2FE25A01BA1D /* Constants.swift */; };
 		0A18CAEBE561F9222CE8F6EB /* ShellExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE61E1B74CB988A22CC10AC4 /* ShellExecutor.swift */; };
+		0FBE25F858C05C91E070EAA2 /* LaunchAtLoginHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6398AD04B4EAF9FF6ED121 /* LaunchAtLoginHelper.swift */; };
 		249B7033B0C69F621374359B /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBAEB17AC0C6AF72D16046A /* GitService.swift */; };
 		2AC829E7D965B1B0DB96428B /* UncommitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871C02B9E9DD13DFF3E81F56 /* UncommitApp.swift */; };
 		2C23A3E188A4DD3F20AED093 /* RepoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081D5C03C98770626063FE35 /* RepoRowView.swift */; };
@@ -62,6 +63,7 @@
 		97A3C9C84BBDAD6B9B7058C6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A412EE8B521B955C51D28B50 /* RepoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoListView.swift; sourceTree = "<group>"; };
 		AE61E1B74CB988A22CC10AC4 /* ShellExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellExecutor.swift; sourceTree = "<group>"; };
+		AF6398AD04B4EAF9FF6ED121 /* LaunchAtLoginHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginHelper.swift; sourceTree = "<group>"; };
 		C02A3B14B23B2C725867A36E /* EditorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorHelper.swift; sourceTree = "<group>"; };
 		C501DB6BA90CCDDFF8407043 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		CBBAEB17AC0C6AF72D16046A /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
@@ -75,6 +77,7 @@
 			children = (
 				1753A0750C0A2FE25A01BA1D /* Constants.swift */,
 				C02A3B14B23B2C725867A36E /* EditorHelper.swift */,
+				AF6398AD04B4EAF9FF6ED121 /* LaunchAtLoginHelper.swift */,
 				3A0AD955AFC676AB40AFCE54 /* MenuBarIconProvider.swift */,
 			);
 			path = Utilities;
@@ -257,6 +260,7 @@
 				56110ABA8E4CD31CBA54922E /* GitRepository.swift in Sources */,
 				249B7033B0C69F621374359B /* GitService.swift in Sources */,
 				A8B8A56A6A582EC583FE40CA /* GitStatus.swift in Sources */,
+				0FBE25F858C05C91E070EAA2 /* LaunchAtLoginHelper.swift in Sources */,
 				C0C906ED22BDC6FDA035A3D0 /* MenuBarIconProvider.swift in Sources */,
 				AAB630FEABE0CDB3E3897408 /* PersistenceService.swift in Sources */,
 				371DFE90C8F32697140E415B /* PopoverContentView.swift in Sources */,
