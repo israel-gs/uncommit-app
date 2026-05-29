@@ -482,6 +482,19 @@ final class AppViewModel {
         saveConfiguration()
     }
 
+    // MARK: - Pinning
+
+    func togglePin(for repo: GitRepository) {
+        guard let index = repositories.firstIndex(where: { $0.id == repo.id }) else { return }
+        repositories[index].isPinned.toggle()
+        logger.info("📌 \(self.repositories[index].isPinned ? "Pinned" : "Unpinned") repo: \(repo.displayName)")
+        saveConfiguration()
+    }
+
+    func isPinned(_ repo: GitRepository) -> Bool {
+        repositories.first(where: { $0.id == repo.id })?.isPinned ?? false
+    }
+
     func reportEditorError(for repo: GitRepository, message: String) {
         errors[repo.id] = message
         let id = repo.id

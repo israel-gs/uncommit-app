@@ -35,6 +35,10 @@ struct RepoListView: View {
 
     private var sortedRepos: [GitRepository] {
         viewModel.repositories.sorted { a, b in
+            // Pinned repos always come first.
+            if a.isPinned != b.isPinned {
+                return a.isPinned
+            }
             let aLevel = viewModel.healthLevel(for: a)
             let bLevel = viewModel.healthLevel(for: b)
             if aLevel != bLevel {

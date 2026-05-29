@@ -18,6 +18,13 @@ struct RepoRowView: View {
                     .font(.system(.body, weight: .medium))
                     .lineLimit(1)
 
+                if repo.isPinned {
+                    Image(systemName: "pin.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .rotationEffect(.degrees(45))
+                }
+
                 Spacer()
 
                 if let branch = status?.branchName {
@@ -97,6 +104,18 @@ struct RepoRowView: View {
 
             // Action buttons
             HStack(spacing: 8) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        viewModel.togglePin(for: repo)
+                    }
+                } label: {
+                    Image(systemName: repo.isPinned ? "pin.fill" : "pin")
+                        .font(.caption)
+                        .foregroundStyle(repo.isPinned ? .orange : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(repo.isPinned ? "Unpin" : "Pin to top")
+
                 Spacer()
 
                 // Pull/push are conditional: shown only when relevant. Pull
