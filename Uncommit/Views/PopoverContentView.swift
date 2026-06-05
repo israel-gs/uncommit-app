@@ -80,16 +80,38 @@ struct PopoverContentView: View {
                         }
                         .buttonStyle(.borderless)
                     }
+
+                    displayModeToggle
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
 
                 Divider()
 
-                RepoListView(searchText: searchText)
+                // While searching we always show a flat result list so matches
+                // in other groups aren't hidden behind an inactive tab.
+                if viewModel.repoDisplayMode == .grouped && searchText.isEmpty {
+                    GroupedRepoListView()
+                } else {
+                    RepoListView(searchText: searchText)
+                }
             }
         }
         .frame(minWidth: 380, maxWidth: 380, minHeight: 200, maxHeight: 550)
+    }
+
+    /// Switches between the flat list and the grouped-by-root-folder tabs.
+    private var displayModeToggle: some View {
+        let grouped = viewModel.repoDisplayMode == .grouped
+        return Button {
+            viewModel.setRepoDisplayMode(grouped ? .list : .grouped)
+        } label: {
+            Image(systemName: grouped ? "square.grid.2x2" : "list.bullet")
+                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+        }
+        .buttonStyle(.borderless)
+        .help(grouped ? "Show as a single list" : "Group by root folder")
     }
 
     /// "Updated 12s ago" — refreshes once per second via TimelineView so the

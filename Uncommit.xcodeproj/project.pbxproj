@@ -13,6 +13,7 @@
 		249B7033B0C69F621374359B /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBAEB17AC0C6AF72D16046A /* GitService.swift */; };
 		2AC829E7D965B1B0DB96428B /* UncommitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 871C02B9E9DD13DFF3E81F56 /* UncommitApp.swift */; };
 		2C23A3E188A4DD3F20AED093 /* RepoRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 081D5C03C98770626063FE35 /* RepoRowView.swift */; };
+		3262CE7003AF45824C86B941 /* RepoGroupingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22DACAFFEE085E92546D57C5 /* RepoGroupingTests.swift */; };
 		371DFE90C8F32697140E415B /* PopoverContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92F09D33EA4724B259F27BDA /* PopoverContentView.swift */; };
 		3D295EA5DD71740C420F729C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97A3C9C84BBDAD6B9B7058C6 /* Assets.xcassets */; };
 		3E40CDC99F89CF9B654ADB83 /* RepoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A412EE8B521B955C51D28B50 /* RepoListView.swift */; };
@@ -21,6 +22,7 @@
 		5E64825FE8A319B96E1BB9CC /* GitStatusParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */; };
 		615E8572D2037B0811A29BF8 /* AppViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57F9D5D03DBC3D6F1CDC4454 /* AppViewModel.swift */; };
 		8494643F17855F5CD0AE99DB /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D0E458DEB352CA61DDFC07F /* SettingsView.swift */; };
+		84BF65B4C46CBBF5B512EAEC /* GroupedRepoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68B89ECF280321925F7EE172 /* GroupedRepoListView.swift */; };
 		9E0B375FA73F9D50A605B3BE /* EditorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02A3B14B23B2C725867A36E /* EditorHelper.swift */; };
 		A8B8A56A6A582EC583FE40CA /* GitStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C7F0CF85C148806DD34F60 /* GitStatus.swift */; };
 		AAB630FEABE0CDB3E3897408 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C501DB6BA90CCDDFF8407043 /* PersistenceService.swift */; };
@@ -47,6 +49,7 @@
 		14E644627127110093E71922 /* RepoMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoMonitor.swift; sourceTree = "<group>"; };
 		170302FE2175491D123F7BC5 /* StatusIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusIndicatorView.swift; sourceTree = "<group>"; };
 		1753A0750C0A2FE25A01BA1D /* Constants.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Constants.swift; sourceTree = "<group>"; };
+		22DACAFFEE085E92546D57C5 /* RepoGroupingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoGroupingTests.swift; sourceTree = "<group>"; };
 		35C7F0CF85C148806DD34F60 /* GitStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatus.swift; sourceTree = "<group>"; };
 		37C0C9BAAB88B01D9B311ADE /* Uncommit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uncommit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		398EB01EAA9615741D561918 /* RepoDiscoveryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoDiscoveryService.swift; sourceTree = "<group>"; };
@@ -56,6 +59,7 @@
 		4E601258A307C815AD1A86D3 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		57F9D5D03DBC3D6F1CDC4454 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		5C625EE29B59596BD5DC167E /* UncommitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UncommitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		68B89ECF280321925F7EE172 /* GroupedRepoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedRepoListView.swift; sourceTree = "<group>"; };
 		7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusParserTests.swift; sourceTree = "<group>"; };
 		7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		871C02B9E9DD13DFF3E81F56 /* UncommitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UncommitApp.swift; sourceTree = "<group>"; };
@@ -96,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */,
+				22DACAFFEE085E92546D57C5 /* RepoGroupingTests.swift */,
 			);
 			path = UncommitTests;
 			sourceTree = "<group>";
@@ -104,6 +109,7 @@
 			isa = PBXGroup;
 			children = (
 				7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */,
+				68B89ECF280321925F7EE172 /* GroupedRepoListView.swift */,
 				92F09D33EA4724B259F27BDA /* PopoverContentView.swift */,
 				A412EE8B521B955C51D28B50 /* RepoListView.swift */,
 				081D5C03C98770626063FE35 /* RepoRowView.swift */,
@@ -260,6 +266,7 @@
 				56110ABA8E4CD31CBA54922E /* GitRepository.swift in Sources */,
 				249B7033B0C69F621374359B /* GitService.swift in Sources */,
 				A8B8A56A6A582EC583FE40CA /* GitStatus.swift in Sources */,
+				84BF65B4C46CBBF5B512EAEC /* GroupedRepoListView.swift in Sources */,
 				0FBE25F858C05C91E070EAA2 /* LaunchAtLoginHelper.swift in Sources */,
 				C0C906ED22BDC6FDA035A3D0 /* MenuBarIconProvider.swift in Sources */,
 				AAB630FEABE0CDB3E3897408 /* PersistenceService.swift in Sources */,
@@ -281,6 +288,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				5E64825FE8A319B96E1BB9CC /* GitStatusParserTests.swift in Sources */,
+				3262CE7003AF45824C86B941 /* RepoGroupingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

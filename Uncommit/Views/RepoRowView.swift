@@ -8,6 +8,13 @@ struct RepoRowView: View {
     private var error: String? { viewModel.error(for: repo) }
     private var isCheckingRemote: Bool { viewModel.isCheckingRemote(repo) }
 
+    /// The directory containing the repo, with the home directory abbreviated
+    /// to `~`. e.g. "~/Documents/work".
+    private var locationPath: String {
+        let parent = URL(fileURLWithPath: repo.path).deletingLastPathComponent().path
+        return (parent as NSString).abbreviatingWithTildeInPath
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Top: status dot + name + branch
@@ -38,6 +45,14 @@ struct RepoRowView: View {
                     .lineLimit(1)
                 }
             }
+
+            // Location: the directory containing the repo, so projects under
+            // the same parent read like a file tree. Secondary, de-emphasized.
+            Text(locationPath)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
             // Status details
             if let status = status {

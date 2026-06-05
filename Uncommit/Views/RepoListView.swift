@@ -17,43 +17,48 @@ struct RepoListView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(.vertical, 32)
         } else {
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    ForEach(filteredRepos) { repo in
-                        RepoRowView(repo: repo)
-                        if repo.id != filteredRepos.last?.id {
-                            Divider()
-                                .padding(.horizontal, 12)
-                        }
-                    }
-                }
-            }
+            RepoRowsScrollView(repos: filteredRepos)
         }
     }
 
     // MARK: - Computed
 
-    private var sortedRepos: [GitRepository] {
-        viewModel.repositories.sorted { a, b in
-            // Pinned repos always come first.
-            if a.isPinned != b.isPinned {
-                return a.isPinned
+    private var filteredRepos: [GitRepository] {
+        viewModel.sorted(viewModel.repositories.filtered(by: searchText))
+    }
+}
+
+// MARK: - Shared rows
+
+/// Renders an ordered list of repository rows with dividers between them.
+/// Reused by both the flat list and each grouped tab.
+struct RepoRowsScrollView: View {
+    let repos: [GitRepository]
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(repos) { repo in
+                    RepoRowView(repo: repo)
+                    if repo.id != repos.last?.id {
+                        Divider()
+                            .padding(.horizontal, 12)
+                    }
+                }
             }
-            let aLevel = viewModel.healthLevel(for: a)
-            let bLevel = viewModel.healthLevel(for: b)
-            if aLevel != bLevel {
-                return aLevel > bLevel
-            }
-            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
         }
     }
+}
 
-    private var filteredRepos: [GitRepository] {
+// MARK: - Filtering
+
+extension Array where Element == GitRepository {
+    /// Filters by display name. An empty/whitespace query returns the array
+    /// unchanged.
+    func filtered(by searchText: String) -> [GitRepository] {
         guard !searchText.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return sortedRepos
+            return self
         }
-        return sortedRepos.filter {
-            $0.displayName.localizedCaseInsensitiveContains(searchText)
-        }
+        return filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
     }
 }

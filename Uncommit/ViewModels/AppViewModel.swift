@@ -474,6 +474,84 @@ final class AppViewModel {
         checkingRemote.remove(id)
     }
 
+    // MARK: - Display Mode & Grouping
+
+    /// A set of repositories sharing a root (watched) folder. `folder == nil`
+    /// is the catch-all "Other" group for repos added outside any watched folder.
+    struct RepoGroup: Identifiable {
+        let folder: WatchedFolder?
+        let repos: [GitRepository]
+        var id: String { folder?.id.uuidString ?? "__other__" }
+        var displayName: String { folder?.displayName ?? "Other" }
+    }
+
+    var repoDisplayMode: RepoDisplayMode { configuration.repoDisplayMode }
+
+    func setRepoDisplayMode(_ mode: RepoDisplayMode) {
+        guard configuration.repoDisplayMode != mode else { return }
+        configuration.repoDisplayMode = mode
+        saveConfiguration()
+    }
+
+    /// Finds the watched folder a repo belongs to. When folders are nested, the
+    /// deepest (longest path) match wins so the repo lands in its closest root.
+    func watchedFolder(for repo: GitRepository) -> WatchedFolder? {
+        watchedFolders
+            .filter { repo.path == $0.path || repo.path.hasPrefix($0.path + "/") }
+            .max { $0.path.count < $1.path.count }
+    }
+
+    /// Repositories grouped by root folder. Groups are sorted by name with the
+    /// "Other" group (repos under no watched folder) pinned to the end. Empty
+    /// groups are omitted.
+    var groupedRepositories: [RepoGroup] {
+        var byFolder: [UUID: [GitRepository]] = [:]
+        var other: [GitRepository] = []
+        for repo in repositories {
+            if let folder = watchedFolder(for: repo) {
+                byFolder[folder.id, default: []].append(repo)
+            } else {
+                other.append(repo)
+            }
+        }
+
+        var groups = watchedFolders
+            .compactMap { folder -> RepoGroup? in
+                guard let repos = byFolder[folder.id], !repos.isEmpty else { return nil }
+                return RepoGroup(folder: folder, repos: repos)
+            }
+            .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+
+        if !other.isEmpty {
+            groups.append(RepoGroup(folder: nil, repos: other))
+        }
+        return groups
+    }
+
+    /// The most attention-worthy health level among a group's repos, for the
+    /// tab indicator dot.
+    func groupHealthLevel(for group: RepoGroup) -> RepoHealthLevel {
+        group.repos.map { healthLevel(for: $0) }.max() ?? .clean
+    }
+
+    /// Shared row ordering used by both the flat list and each grouped tab:
+    /// pinned first, then by filesystem path, then by name. Ordering by the
+    /// full path keeps repos in the same directory adjacent and sorted by their
+    /// folder name — a file-tree-like grouping. `localizedStandardCompare` gives
+    /// natural (Finder-style) ordering, including numeric segments.
+    func sorted(_ repos: [GitRepository]) -> [GitRepository] {
+        repos.sorted { a, b in
+            if a.isPinned != b.isPinned {
+                return a.isPinned
+            }
+            let pathOrder = a.path.localizedStandardCompare(b.path)
+            if pathOrder != .orderedSame {
+                return pathOrder == .orderedAscending
+            }
+            return a.displayName.localizedCaseInsensitiveCompare(b.displayName) == .orderedAscending
+        }
+    }
+
     // MARK: - Editor
 
     func setCustomEditor(for repo: GitRepository, bundleId: String?) {
