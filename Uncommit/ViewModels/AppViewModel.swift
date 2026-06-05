@@ -535,14 +535,23 @@ final class AppViewModel {
     }
 
     /// Shared row ordering used by both the flat list and each grouped tab:
-    /// pinned first, then by filesystem path, then by name. Ordering by the
-    /// full path keeps repos in the same directory adjacent and sorted by their
-    /// folder name — a file-tree-like grouping. `localizedStandardCompare` gives
-    /// natural (Finder-style) ordering, including numeric segments.
+    /// pinned first, then repos that need attention (errors, pending pull,
+    /// local changes, unpushed commits) ahead of clean ones, then by filesystem
+    /// path, then by name. Ranking by `healthLevel` floats the repos you need
+    /// to act on to the top so they're easy to find. Within the same health
+    /// level, ordering by the full path keeps repos in the same directory
+    /// adjacent and sorted by their folder name — a file-tree-like grouping.
+    /// `localizedStandardCompare` gives natural (Finder-style) ordering,
+    /// including numeric segments.
     func sorted(_ repos: [GitRepository]) -> [GitRepository] {
         repos.sorted { a, b in
             if a.isPinned != b.isPinned {
                 return a.isPinned
+            }
+            let healthA = healthLevel(for: a)
+            let healthB = healthLevel(for: b)
+            if healthA != healthB {
+                return healthA > healthB
             }
             let pathOrder = a.path.localizedStandardCompare(b.path)
             if pathOrder != .orderedSame {
