@@ -16,3 +16,6 @@ build/
 
 # Claude
 .claude/
+
+# gentle-ai skill registry (generated, local)
+.atl/
