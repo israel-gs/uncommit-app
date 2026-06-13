@@ -26,5 +26,14 @@ struct UncommitApp: App {
             }
         }
         .menuBarExtraStyle(.window)
+
+        // Single shared window for reading commits pending push/pull. A lone
+        // `Window` (not value-based WindowGroup) means every badge click reuses
+        // the same window and just swaps content.
+        Window("Commits", id: "commits") {
+            CommitsWindowHost()
+                .environment(viewModel)
+        }
+        .defaultSize(width: 520, height: 460)
     }
 }

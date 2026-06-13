@@ -22,6 +22,34 @@ struct PopoverContentView: View {
                         .frame(width: 16, height: 16)
                 }
 
+                // "Pull all" — shown when repos have incoming commits or while a
+                // pull-all is running. The count doubles as a "how many behind"
+                // glance; a spinner replaces the icon while pulling.
+                if viewModel.reposNeedingPullCount > 0 || viewModel.isPullingAll {
+                    Button {
+                        Task { await viewModel.pullAll() }
+                    } label: {
+                        HStack(spacing: 2) {
+                            if viewModel.isPullingAll {
+                                ProgressView()
+                                    .scaleEffect(0.5)
+                                    .frame(width: 12, height: 12)
+                            } else {
+                                Image(systemName: "arrow.down.to.line")
+                            }
+                            if viewModel.reposNeedingPullCount > 0 {
+                                Text("\(viewModel.reposNeedingPullCount)")
+                            }
+                        }
+                        .font(.system(size: 12))
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(viewModel.isPullingAll)
+                    .help(viewModel.isPullingAll
+                          ? "Pulling…"
+                          : "Pull all repositories with incoming commits (fast-forward)")
+                }
+
                 Button {
                     Task { await viewModel.refreshAll() }
                 } label: {

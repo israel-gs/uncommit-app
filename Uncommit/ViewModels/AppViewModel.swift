@@ -24,7 +24,12 @@ final class AppViewModel {
 
     var isRefreshing: Bool = false
     var isCheckingAllRemotes: Bool = false
+    var isPullingAll: Bool = false
     private(set) var hasStarted = false
+
+    /// Drives the single shared commits window. Clicking an ahead/behind badge
+    /// sets this; the window swaps its content instead of spawning a new window.
+    var commitsRequest: CommitsWindowRequest?
 
     private let discoveryService = RepoDiscoveryService()
     private let monitor = RepoMonitor()
@@ -354,6 +359,66 @@ final class AppViewModel {
         }
     }
 
+    /// Repositories that have incoming commits to fast-forward. Drives both the
+    /// "Pull all" button's visibility and what `pullAll()` operates on.
+    private var reposNeedingPull: [GitRepository] {
+        repositories.filter { statuses[$0.id]?.hasUnpulledChanges == true }
+    }
+
+    var reposNeedingPullCount: Int { reposNeedingPull.count }
+
+    /// Fast-forward-pulls every repo with incoming commits, with a sliding
+    /// window of 4 concurrent pulls — mirrors `checkAllRemotes`. Diverged repos
+    /// (also ahead) fail loudly under --ff-only and surface their error, exactly
+    /// like the per-repo Pull button.
+    func pullAll() async {
+        let targets = reposNeedingPull
+        guard !targets.isEmpty, !isPullingAll else { return }
+        logger.info("👤 User action: Pull All — \(targets.count) repos")
+        isPullingAll = true
+        defer { isPullingAll = false }
+
+        for repo in targets { checkingRemote.insert(repo.id) }
+
+        let maxConcurrent = 4
+        await withTaskGroup(of: (UUID, String?).self) { group in
+            var index = 0
+
+            func pull(_ repo: GitRepository) {
+                group.addTask {
+                    do {
+                        try await GitService.pull(at: repo.path)
+                        return (repo.id, nil)
+                    } catch {
+                        return (repo.id, error.localizedDescription)
+                    }
+                }
+            }
+
+            while index < min(maxConcurrent, targets.count) {
+                pull(targets[index])
+                index += 1
+            }
+
+            for await (id, errMsg) in group {
+                checkingRemote.remove(id)
+                if let errMsg {
+                    errors[id] = errMsg
+                } else {
+                    errors[id] = nil
+                    if let repo = repositories.first(where: { $0.id == id }) {
+                        await refreshSingle(repo)
+                    }
+                }
+
+                if index < targets.count {
+                    pull(targets[index])
+                    index += 1
+                }
+            }
+        }
+    }
+
     func pull(_ repo: GitRepository) async {
         logger.info("👤 User action: Pull — \(repo.displayName)")
         checkingRemote.insert(repo.id)
@@ -373,6 +438,34 @@ final class AppViewModel {
         defer { checkingRemote.remove(repo.id) }
         do {
             try await GitService.push(at: repo.path)
+            errors[repo.id] = nil
+            await refreshSingle(repo)
+        } catch {
+            errors[repo.id] = error.localizedDescription
+        }
+    }
+
+    /// Syncs a submodule back to the commit the parent records (`git submodule
+    /// update`). Surfaces git's error (e.g. dirty submodule) on the repo row.
+    func syncSubmodule(_ repo: GitRepository, submodule name: String) async {
+        logger.info("👤 User action: Submodule update \(name) — \(repo.displayName)")
+        checkingRemote.insert(repo.id)
+        defer { checkingRemote.remove(repo.id) }
+        do {
+            try await GitService.updateSubmodule(at: repo.path, submodule: name)
+            errors[repo.id] = nil
+            await refreshSingle(repo)
+        } catch {
+            errors[repo.id] = error.localizedDescription
+        }
+    }
+
+    func checkout(_ repo: GitRepository, to branch: String) async {
+        logger.info("👤 User action: Checkout \(branch) — \(repo.displayName)")
+        checkingRemote.insert(repo.id)
+        defer { checkingRemote.remove(repo.id) }
+        do {
+            try await GitService.checkout(at: repo.path, branch: branch)
             errors[repo.id] = nil
             await refreshSingle(repo)
         } catch {
