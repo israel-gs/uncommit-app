@@ -64,17 +64,27 @@ final class AppViewModel {
     func error(for repo: GitRepository) -> String? { errors[repo.id] }
     func isCheckingRemote(_ repo: GitRepository) -> Bool { checkingRemote.contains(repo.id) }
 
+    /// A transient failure — a fetch with no network, a push git rejected —
+    /// must not erase what we already know about the working tree. As long as
+    /// we have a status, that status IS the health; the error rides along in
+    /// the row as its own line. Only a repo we've never managed to read at all
+    /// reports `.error`.
     func healthLevel(for repo: GitRepository) -> RepoHealthLevel {
-        if errors[repo.id] != nil { return .error }
-        return statuses[repo.id]?.healthLevel ?? .error
+        statuses[repo.id]?.healthLevel ?? .error
     }
 
     // MARK: - Computed
 
+    /// Worst health across repos we have an answer for. Repos still loading are
+    /// skipped so the icon isn't red for the first second after launch, and a
+    /// repo that errored but has a known status contributes that status — one
+    /// unreachable remote shouldn't paint the whole menu bar red, which matters
+    /// now that remote checks run on their own.
     var overallHealth: RepoHealthLevel {
-        if !errors.isEmpty { return .error }
-        let levels = statuses.values.map(\.healthLevel)
-        if levels.isEmpty { return .clean }
+        let levels = repositories.compactMap { repo -> RepoHealthLevel? in
+            if let status = statuses[repo.id] { return status.healthLevel }
+            return errors[repo.id] != nil ? .error : nil
+        }
         return levels.max() ?? .clean
     }
 
@@ -155,6 +165,8 @@ final class AppViewModel {
             saveConfiguration()
         }
 
+        migrateIfNeeded()
+
         // Reconcile persisted preference with the actual system login-item
         // state, in case the user changed it from System Settings directly.
         let systemEnabled = LaunchAtLoginHelper.isEnabled
@@ -166,6 +178,43 @@ final class AppViewModel {
         logger.info("🚀 App started — \(self.repositories.count) repos, \(self.watchedFolders.count) watched folders")
         setupMonitorCallbacks()
         startMonitoring()
+    }
+
+    /// Brings an already-persisted config up to the current defaults.
+    ///
+    /// v0 → v1: automatic remote checks shipped disabled AND with no way to
+    /// turn them on, so every stored config says `autoCheckRemote == false`
+    /// whether or not the user ever wanted that. Enable it once here; from now
+    /// on the toggle in Preferences owns the value and migration won't run again.
+    ///
+    /// Internal rather than private so it can be tested on its own — it changes
+    /// a user-visible preference without asking, so it needs to be pinned down.
+    func migrateIfNeeded() {
+        guard configuration.configVersion < AppConfiguration.currentVersion else { return }
+        logger.info("🔧 Migrating config v\(self.configuration.configVersion) → v\(AppConfiguration.currentVersion) — enabling automatic remote checks")
+        configuration.autoCheckRemote = true
+        configuration.remoteCheckIntervalSeconds = AppConstants.defaultRemoteCheckInterval
+        configuration.configVersion = AppConfiguration.currentVersion
+        saveConfiguration()
+    }
+
+    // MARK: - Remote check preferences
+
+    /// Both of these change what the monitor polls and how often, so they
+    /// restart it rather than only persisting — the remote loop reads its
+    /// interval once at start and then sleeps on it.
+    func setAutoCheckRemote(_ enabled: Bool) {
+        guard configuration.autoCheckRemote != enabled else { return }
+        logger.info("👤 User action: Auto remote check → \(enabled)")
+        configuration.autoCheckRemote = enabled
+        saveAndRestartMonitor()
+    }
+
+    func setRemoteCheckInterval(_ seconds: TimeInterval) {
+        guard configuration.remoteCheckIntervalSeconds != seconds else { return }
+        logger.info("👤 User action: Remote check interval → \(seconds)s")
+        configuration.remoteCheckIntervalSeconds = seconds
+        saveAndRestartMonitor()
     }
 
     // MARK: - Launch at Login

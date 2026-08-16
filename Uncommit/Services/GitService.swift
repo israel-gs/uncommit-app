@@ -229,12 +229,16 @@ enum GitService {
         return Array(files.prefix(maxFileNamesPerCategory)) + ["... and \(files.count - maxFileNamesPerCategory) more"]
     }
 
+    /// Fetches the current branch's remote — not `--all`, which walks every
+    /// configured remote (upstreams, forks) when only the one behind `@{u}`
+    /// feeds our ahead/behind counts. A repo with no remote at all is a no-op
+    /// that still exits 0, so local-only repos don't surface an error.
     static func fetch(at repoPath: String) async throws {
         let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
         logger.debug("🌐 fetch START — \(shortName)")
         let start = CFAbsoluteTimeGetCurrent()
         _ = try await ShellExecutor.run(
-            "git", arguments: ["fetch", "--all", "--prune"],
+            "git", arguments: ["fetch", "--prune"],
             workingDirectory: repoPath,
             timeout: 30
         )

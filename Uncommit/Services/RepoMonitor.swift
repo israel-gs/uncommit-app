@@ -19,6 +19,12 @@ final class RepoMonitor {
     private let maxConcurrentLocal = 6
     /// Max concurrent remote fetch operations (slow, network-bound).
     private let maxConcurrentRemote = 4
+    /// Grace period before the first remote sweep, so it doesn't contend with
+    /// the initial local pass on launch.
+    private let initialRemoteCheckDelay: TimeInterval = 5
+    /// One first sweep per app run. `startMonitoring` also runs on every repo
+    /// add/remove, and re-fetching every remote each time would be wasteful.
+    private var hasDoneInitialRemoteCheck = false
 
     var repositories: [GitRepository] = []
     var onStatusUpdate: (@MainActor @Sendable (String, GitRepoStatus) -> Void)?
@@ -54,7 +60,16 @@ final class RepoMonitor {
 
         if autoCheckRemote {
             remoteCheckTask = Task { [weak self] in
-                // First remote check after the interval (not immediately)
+                // One sweep shortly after launch: at a 15-minute cadence, waiting
+                // a full interval would leave ahead/behind blank for the first
+                // popover the user opens.
+                if let self, !self.hasDoneInitialRemoteCheck {
+                    self.hasDoneInitialRemoteCheck = true
+                    try? await Task.sleep(for: .seconds(self.initialRemoteCheckDelay))
+                    guard !Task.isCancelled else { return }
+                    await self.fetchAndCheckAllRemotes()
+                }
+
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .seconds(remoteInterval))
                     guard !Task.isCancelled else { break }

@@ -10,16 +10,23 @@ enum RepoDisplayMode: String, Codable {
 }
 
 struct AppConfiguration: Codable {
-    var refreshIntervalSeconds: TimeInterval = 30
-    var autoCheckRemote: Bool = false
-    var remoteCheckIntervalSeconds: TimeInterval = 300
-    var maxDiscoveryDepth: Int = 3
+    /// Bumped when a shipped default changes in a way that already-persisted
+    /// configs need to be migrated to. See `AppViewModel.migrateIfNeeded()`.
+    static let currentVersion = 1
+
+    var refreshIntervalSeconds: TimeInterval = AppConstants.defaultRefreshInterval
+    var autoCheckRemote: Bool = true
+    var remoteCheckIntervalSeconds: TimeInterval = AppConstants.defaultRemoteCheckInterval
+    var maxDiscoveryDepth: Int = AppConstants.defaultMaxDiscoveryDepth
     var repositories: [GitRepository] = []
     var watchedFolders: [WatchedFolder] = []
     var launchAtLogin: Bool = false
     /// Bundle identifier for the default editor app (e.g. "com.microsoft.VSCode").
     var defaultEditorBundleId: String?
     var repoDisplayMode: RepoDisplayMode = .list
+    /// Version of the config that produced this value. A config written before
+    /// versioning existed decodes as 0 and gets migrated on next launch.
+    var configVersion: Int = AppConfiguration.currentVersion
 
     init() {}
 
@@ -31,20 +38,22 @@ struct AppConfiguration: Codable {
     enum CodingKeys: String, CodingKey {
         case refreshIntervalSeconds, autoCheckRemote, remoteCheckIntervalSeconds
         case maxDiscoveryDepth, repositories, watchedFolders, launchAtLogin
-        case defaultEditorBundleId, repoDisplayMode
+        case defaultEditorBundleId, repoDisplayMode, configVersion
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        refreshIntervalSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .refreshIntervalSeconds) ?? 30
-        autoCheckRemote = try c.decodeIfPresent(Bool.self, forKey: .autoCheckRemote) ?? false
-        remoteCheckIntervalSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .remoteCheckIntervalSeconds) ?? 300
-        maxDiscoveryDepth = try c.decodeIfPresent(Int.self, forKey: .maxDiscoveryDepth) ?? 3
+        refreshIntervalSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .refreshIntervalSeconds) ?? AppConstants.defaultRefreshInterval
+        autoCheckRemote = try c.decodeIfPresent(Bool.self, forKey: .autoCheckRemote) ?? true
+        remoteCheckIntervalSeconds = try c.decodeIfPresent(TimeInterval.self, forKey: .remoteCheckIntervalSeconds) ?? AppConstants.defaultRemoteCheckInterval
+        maxDiscoveryDepth = try c.decodeIfPresent(Int.self, forKey: .maxDiscoveryDepth) ?? AppConstants.defaultMaxDiscoveryDepth
         repositories = try c.decodeIfPresent([GitRepository].self, forKey: .repositories) ?? []
         watchedFolders = try c.decodeIfPresent([WatchedFolder].self, forKey: .watchedFolders) ?? []
         launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? false
         defaultEditorBundleId = try c.decodeIfPresent(String.self, forKey: .defaultEditorBundleId)
         repoDisplayMode = try c.decodeIfPresent(RepoDisplayMode.self, forKey: .repoDisplayMode) ?? .list
+        // Absent = written before versioning existed, so it needs migrating.
+        configVersion = try c.decodeIfPresent(Int.self, forKey: .configVersion) ?? 0
     }
 }
 

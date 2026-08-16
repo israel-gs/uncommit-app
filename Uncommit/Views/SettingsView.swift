@@ -231,6 +231,39 @@ struct SettingsView: View {
                         .frame(width: 80)
                     }
 
+                    Toggle(isOn: Binding(
+                        get: { viewModel.configuration.autoCheckRemote },
+                        set: { viewModel.setAutoCheckRemote($0) }
+                    )) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Check remotes automatically")
+                                .font(.callout)
+                            Text("Fetches in the background so incoming commits show up on their own.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+
+                    if viewModel.configuration.autoCheckRemote {
+                        HStack {
+                            Text("Check remotes every")
+                                .font(.callout)
+                            Spacer()
+                            Picker("", selection: Binding(
+                                get: { viewModel.configuration.remoteCheckIntervalSeconds },
+                                set: { viewModel.setRemoteCheckInterval($0) }
+                            )) {
+                                Text("5m").tag(300.0)
+                                Text("15m").tag(900.0)
+                                Text("30m").tag(1800.0)
+                                Text("1h").tag(3600.0)
+                            }
+                            .frame(width: 80)
+                        }
+                    }
+
                     HStack {
                         Text("Scan depth")
                             .font(.callout)
