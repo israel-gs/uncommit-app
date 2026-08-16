@@ -77,6 +77,42 @@ final class PersistenceIsolationTests: XCTestCase {
         XCTAssertEqual(service.loadPrevious()?.repositories.map(\.displayName), ["keep"])
     }
 
+    // MARK: - Popover size
+
+    func testPopoverSizeIsClampedToSomethingUsable() {
+        let vm = makeIsolatedViewModel()
+
+        vm.setPopoverSize(width: 10, height: 10)
+        XCTAssertEqual(vm.configuration.popoverWidth, AppConstants.minPopoverWidth)
+        XCTAssertEqual(vm.configuration.popoverHeight, AppConstants.minPopoverHeight)
+
+        vm.setPopoverSize(width: 99_999, height: 99_999)
+        XCTAssertEqual(vm.configuration.popoverWidth, AppConstants.maxPopoverWidth)
+        XCTAssertEqual(vm.configuration.popoverHeight, AppConstants.maxPopoverHeight)
+    }
+
+    func testPopoverSizeSurvivesARoundTrip() throws {
+        var config = AppConfiguration()
+        config.popoverWidth = 640
+        config.popoverHeight = 700
+        let data = try JSONEncoder().encode(config)
+        let decoded = try JSONDecoder().decode(AppConfiguration.self, from: data)
+
+        XCTAssertEqual(decoded.popoverWidth, 640)
+        XCTAssertEqual(decoded.popoverHeight, 700)
+    }
+
+    /// A config written before the popover was resizable must open at the size
+    /// it always had, not at zero.
+    func testConfigWithoutASizeFallsBackToTheDefault() throws {
+        let decoded = try JSONDecoder().decode(
+            AppConfiguration.self,
+            from: Data(#"{"configVersion":1}"#.utf8)
+        )
+        XCTAssertEqual(decoded.popoverWidth, AppConstants.defaultPopoverWidth)
+        XCTAssertEqual(decoded.popoverHeight, AppConstants.defaultPopoverHeight)
+    }
+
     func testFirstSaveHasNoPrevious() {
         let suite = UserDefaults(suiteName: "com.uncommit.tests.\(UUID().uuidString)")!
         let service = PersistenceService(defaults: suite)

@@ -27,6 +27,8 @@ struct AppConfiguration: Codable {
     /// Version of the config that produced this value. A config written before
     /// versioning existed decodes as 0 and gets migrated on next launch.
     var configVersion: Int = AppConfiguration.currentVersion
+    var popoverWidth: Double = AppConstants.defaultPopoverWidth
+    var popoverHeight: Double = AppConstants.defaultPopoverHeight
 
     init() {}
 
@@ -39,6 +41,7 @@ struct AppConfiguration: Codable {
         case refreshIntervalSeconds, autoCheckRemote, remoteCheckIntervalSeconds
         case maxDiscoveryDepth, repositories, watchedFolders, launchAtLogin
         case defaultEditorBundleId, repoDisplayMode, configVersion
+        case popoverWidth, popoverHeight
     }
 
     init(from decoder: Decoder) throws {
@@ -54,6 +57,8 @@ struct AppConfiguration: Codable {
         repoDisplayMode = try c.decodeIfPresent(RepoDisplayMode.self, forKey: .repoDisplayMode) ?? .list
         // Absent = written before versioning existed, so it needs migrating.
         configVersion = try c.decodeIfPresent(Int.self, forKey: .configVersion) ?? 0
+        popoverWidth = try c.decodeIfPresent(Double.self, forKey: .popoverWidth) ?? AppConstants.defaultPopoverWidth
+        popoverHeight = try c.decodeIfPresent(Double.self, forKey: .popoverHeight) ?? AppConstants.defaultPopoverHeight
     }
 }
 

@@ -9,4 +9,13 @@ enum AppConstants {
     static let defaultRemoteCheckInterval: TimeInterval = 900
     static let defaultMaxDiscoveryDepth = 3
     static let appName = "Uncommit"
+
+    /// Popover size. The window is content-driven up to `popoverHeight`, so a
+    /// short list still shows a short popover; the stored value is the ceiling.
+    static let defaultPopoverWidth: Double = 380
+    static let defaultPopoverHeight: Double = 550
+    static let minPopoverWidth: Double = 320
+    static let maxPopoverWidth: Double = 900
+    static let minPopoverHeight: Double = 240
+    static let maxPopoverHeight: Double = 1000
 }

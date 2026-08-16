@@ -675,6 +675,20 @@ final class AppViewModel {
         repoStates[id]?.reset()
     }
 
+    // MARK: - Popover size
+
+    /// Applies a dragged size, clamped to something usable. Not persisted —
+    /// the drag calls this on every frame, and writing UserDefaults that often
+    /// would be wasteful. `persistPopoverSize()` runs once when the drag ends.
+    func setPopoverSize(width: Double, height: Double) {
+        configuration.popoverWidth = min(max(width, AppConstants.minPopoverWidth), AppConstants.maxPopoverWidth)
+        configuration.popoverHeight = min(max(height, AppConstants.minPopoverHeight), AppConstants.maxPopoverHeight)
+    }
+
+    func persistPopoverSize() {
+        saveConfiguration()
+    }
+
     // MARK: - Display Mode & Grouping
 
     /// A set of repositories sharing a root (watched) folder. `folder == nil`

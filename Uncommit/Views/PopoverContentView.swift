@@ -5,6 +5,8 @@ struct PopoverContentView: View {
     @State private var showingSettings = false
     @State private var searchText = ""
     @FocusState private var searchFocused: Bool
+    /// Size the current resize drag started from.
+    @State private var dragOrigin: CGSize?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -147,7 +149,50 @@ struct PopoverContentView: View {
                 }
             }
         }
-        .frame(minWidth: 380, maxWidth: 380, minHeight: 200, maxHeight: 550)
+        .frame(
+            minWidth: viewModel.configuration.popoverWidth,
+            maxWidth: viewModel.configuration.popoverWidth,
+            minHeight: AppConstants.minPopoverHeight,
+            maxHeight: viewModel.configuration.popoverHeight
+        )
+        .overlay(alignment: .bottomTrailing) { resizeGrip }
+    }
+
+    /// Drag handle for the popover's size.
+    ///
+    /// A MenuBarExtra window has no title bar and no system resize edges, so the
+    /// size has to be driven from the SwiftUI frame — the panel follows its
+    /// content. Height is a ceiling rather than a fixed value, so a short list
+    /// still gets a short popover.
+    private var resizeGrip: some View {
+        Image(systemName: "line.diagonal")
+            .font(.system(size: 9, weight: .bold))
+            .rotationEffect(.degrees(90))
+            .foregroundStyle(.tertiary)
+            .frame(width: 16, height: 16)
+            .contentShape(Rectangle())
+            .help("Drag to resize")
+            .accessibilityHidden(true)
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        // Anchor on the size the drag started from, so the
+                        // popover doesn't accelerate away as it grows.
+                        let origin = dragOrigin ?? CGSize(
+                            width: viewModel.configuration.popoverWidth,
+                            height: viewModel.configuration.popoverHeight
+                        )
+                        if dragOrigin == nil { dragOrigin = origin }
+                        viewModel.setPopoverSize(
+                            width: origin.width + value.translation.width,
+                            height: origin.height + value.translation.height
+                        )
+                    }
+                    .onEnded { _ in
+                        dragOrigin = nil
+                        viewModel.persistPopoverSize()
+                    }
+            )
     }
 
     /// Switches between the flat list and the grouped-by-root-folder tabs.
