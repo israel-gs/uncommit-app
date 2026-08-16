@@ -111,11 +111,24 @@ struct RepoRowView: View {
                 }
             }
 
-            // Action bar: only what is contextual right now. Everything
-            // else moved to the context menu — seven fixed buttons per row
-            // made a 380pt popover unreadable.
+            // Every action stays one click away. Moving pin/copy/Finder/editor
+            // into the context menu tidied the row up but turned the common
+            // path — open, find the repo, click — into two interactions. The
+            // context menu is still there as a second route; it just isn't the
+            // only one.
             HStack(spacing: 8) {
-                editorButton
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        viewModel.togglePin(for: repo)
+                    }
+                } label: {
+                    Image(systemName: repo.isPinned ? "pin.fill" : "pin")
+                        .font(.caption)
+                        .foregroundStyle(repo.isPinned ? .orange : .secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(repo.isPinned ? "Unpin" : "Pin to top")
+                .accessibilityLabel(repo.isPinned ? "Unpin \(repo.displayName)" : "Pin \(repo.displayName) to top")
 
                 Spacer()
 
@@ -161,19 +174,44 @@ struct RepoRowView: View {
                 Button {
                     Task { await viewModel.checkRemote(for: repo) }
                 } label: {
-                    if isCheckingRemote {
-                        ProgressView()
-                            .scaleEffect(0.5)
-                            .frame(width: 12, height: 12)
-                    } else {
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                            .font(.caption)
+                    HStack(spacing: 2) {
+                        if isCheckingRemote {
+                            ProgressView()
+                                .scaleEffect(0.5)
+                                .frame(width: 10, height: 10)
+                        } else {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        Text("Check Remote")
                     }
+                    .font(.caption)
                 }
                 .buttonStyle(.borderless)
                 .disabled(isCheckingRemote)
-                .help("Check remote")
                 .accessibilityLabel("Check remote for \(repo.displayName)")
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(repo.path, forType: .string)
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Copy path")
+                .accessibilityLabel("Copy path of \(repo.displayName)")
+
+                editorButton
+
+                Button {
+                    revealInFinder(repo.path)
+                } label: {
+                    Image(systemName: "folder")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("Show in Finder")
+                .accessibilityLabel("Show \(repo.displayName) in Finder")
             }
         }
         .padding(.horizontal, 12)
