@@ -26,6 +26,16 @@ final class RepoMonitor {
     /// add/remove, and re-fetching every remote each time would be wasteful.
     private var hasDoneInitialRemoteCheck = false
 
+    /// Filesystem-event source. Tells us WHICH repos changed, so the periodic
+    /// sweep stops being the only way to notice anything.
+    private let watcher = RepoWatcher()
+    /// Repos with pending filesystem activity, drained by `eventRefreshTask`.
+    private var pendingEventPaths: Set<String> = []
+    private var eventRefreshTask: Task<Void, Never>?
+    /// Second coalescing stage on top of FSEvents' own latency: a `git checkout`
+    /// fires several callbacks in a row, and this merges them into one refresh.
+    private let eventDebounce: TimeInterval = 0.3
+
     var repositories: [GitRepository] = []
     var onStatusUpdate: (@MainActor @Sendable (String, GitRepoStatus) -> Void)?
     var onError: (@MainActor @Sendable (String, String) -> Void)?
@@ -42,6 +52,12 @@ final class RepoMonitor {
         stopMonitoring()
         self.repositories = repos
         logger.info("🟢 Monitor started — \(repos.count) repos, local=\(localInterval)s, remote=\(remoteInterval)s, autoRemote=\(autoCheckRemote)")
+
+        // Filesystem events drive the fast path; the loop below is the backstop.
+        watcher.onRepositoriesChanged = { [weak self] paths in
+            self?.enqueueEventRefresh(for: paths)
+        }
+        watcher.start(paths: repos.map(\.path))
 
         // Sequential loop: initial check → sleep → check → sleep → ...
         // The next cycle ONLY starts after the current one fully completes,
@@ -86,6 +102,71 @@ final class RepoMonitor {
         pollingTask = nil
         remoteCheckTask?.cancel()
         remoteCheckTask = nil
+        eventRefreshTask?.cancel()
+        eventRefreshTask = nil
+        pendingEventPaths.removeAll()
+        watcher.onRepositoriesChanged = nil
+        watcher.stop()
+    }
+
+    // MARK: - Event-driven refresh
+
+    /// Collects repos reported by the watcher and schedules one refresh for the
+    /// batch. Re-arming the task on every burst means a long `git rebase` gets
+    /// a single refresh at the end instead of one per file it touches.
+    private func enqueueEventRefresh(for paths: Set<String>) {
+        pendingEventPaths.formUnion(paths)
+        eventRefreshTask?.cancel()
+        eventRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(self?.eventDebounce ?? 0.3))
+            guard !Task.isCancelled, let self else { return }
+            let batch = self.pendingEventPaths
+            self.pendingEventPaths.removeAll()
+            guard !batch.isEmpty else { return }
+            await self.refreshLocal(paths: batch)
+        }
+    }
+
+    /// Re-reads a specific set of repos. Shares the concurrency ceiling with the
+    /// full sweep, and yields to one already in progress — that sweep is about
+    /// to read these repos anyway.
+    private func refreshLocal(paths: Set<String>) async {
+        guard !isRefreshing else {
+            logger.debug("🔄 event refresh skipped — full sweep in progress")
+            return
+        }
+        // Only repos we actually track; the watcher can outlive a removal.
+        let targets = repositories.map(\.path).filter { paths.contains($0) }
+        guard !targets.isEmpty else { return }
+
+        logger.debug("🔄 event refresh — \(targets.count) repo(s)")
+        isRefreshing = true
+        defer { isRefreshing = false }
+
+        await withTaskGroup(of: (String, Result<GitRepoStatus, Error>).self) { group in
+            var index = 0
+            while index < min(maxConcurrentLocal, targets.count) {
+                let path = targets[index]
+                group.addTask { (path, await GitService.fullStatus(at: path)) }
+                index += 1
+            }
+            for await (path, result) in group {
+                report(path: path, result: result)
+                if index < targets.count {
+                    let nextPath = targets[index]
+                    group.addTask { (nextPath, await GitService.fullStatus(at: nextPath)) }
+                    index += 1
+                }
+            }
+        }
+    }
+
+    /// Single place that turns a status result into the right callback.
+    private func report(path: String, result: Result<GitRepoStatus, Error>) {
+        switch result {
+        case .success(let status): onStatusUpdate?(path, status)
+        case .failure(let error): onError?(path, error.localizedDescription)
+        }
     }
 
     // MARK: - Local Status (sliding-window, max 6 concurrent)
@@ -129,13 +210,8 @@ final class RepoMonitor {
             // As each completes, report result and add next repo
             for await (path, result) in group {
                 processedCount += 1
-                switch result {
-                case .success(let status):
-                    onStatusUpdate?(path, status)
-                case .failure(let error):
-                    errorCount += 1
-                    onError?(path, error.localizedDescription)
-                }
+                if case .failure = result { errorCount += 1 }
+                report(path: path, result: result)
 
                 if index < repos.count {
                     let nextPath = repos[index].path
@@ -181,13 +257,7 @@ final class RepoMonitor {
             return
         }
 
-        let result = await GitService.fullStatus(at: repoPath)
-        switch result {
-        case .success(let status):
-            onStatusUpdate?(repoPath, status)
-        case .failure(let error):
-            onError?(repoPath, error.localizedDescription)
-        }
+        report(path: repoPath, result: await GitService.fullStatus(at: repoPath))
     }
 
     // MARK: - Remote Check All (sliding-window, max 4 concurrent)
@@ -228,12 +298,7 @@ final class RepoMonitor {
 
             // As each completes, report result and add next repo
             for await (path, result) in group {
-                switch result {
-                case .success(let status):
-                    onStatusUpdate?(path, status)
-                case .failure(let error):
-                    onError?(path, error.localizedDescription)
-                }
+                report(path: path, result: result)
 
                 if index < repos.count {
                     let nextPath = repos[index].path

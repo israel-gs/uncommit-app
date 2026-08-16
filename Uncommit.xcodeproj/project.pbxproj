@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		067187C9CB7B0C376EA9AC18 /* Constants.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1753A0750C0A2FE25A01BA1D /* Constants.swift */; };
 		0A18CAEBE561F9222CE8F6EB /* ShellExecutor.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE61E1B74CB988A22CC10AC4 /* ShellExecutor.swift */; };
+		0BF620471D50315A659687D2 /* RepoWatcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8088EA236364B3754D3E1ED1 /* RepoWatcher.swift */; };
 		0FBE25F858C05C91E070EAA2 /* LaunchAtLoginHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF6398AD04B4EAF9FF6ED121 /* LaunchAtLoginHelper.swift */; };
 		1A24FAFE14B1E5813BC2544D /* CommitsWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE3613A5DABCF97799B0E30D /* CommitsWindowView.swift */; };
 		249B7033B0C69F621374359B /* GitService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBBAEB17AC0C6AF72D16046A /* GitService.swift */; };
@@ -33,6 +34,7 @@
 		C0C906ED22BDC6FDA035A3D0 /* MenuBarIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0AD955AFC676AB40AFCE54 /* MenuBarIconProvider.swift */; };
 		C21F7ACC0977BC53DD5A028A /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */; };
 		C45D5C6F67C5F1DB9F476755 /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E601258A307C815AD1A86D3 /* AppConfiguration.swift */; };
+		C7EDAC6F99B821A00D19A0C1 /* RepoWatcherTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE7A95E0A7B9DE9B4F0F7FF1 /* RepoWatcherTests.swift */; };
 		C8640B2958544E8B48ACB15B /* WatchedFolder.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC5C76DEBFD77DFA79C6FC6B /* WatchedFolder.swift */; };
 		CF63EBDEAAB30E7B02FD08CB /* StatusIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 170302FE2175491D123F7BC5 /* StatusIndicatorView.swift */; };
 		D15787A0350FC6DDC46C8884 /* GitServiceIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 18DFA94A3278CCB010373F48 /* GitServiceIntegrationTests.swift */; };
@@ -72,6 +74,7 @@
 		6A9F9BA8503AB84B479DF976 /* RepoState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoState.swift; sourceTree = "<group>"; };
 		7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusParserTests.swift; sourceTree = "<group>"; };
 		7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
+		8088EA236364B3754D3E1ED1 /* RepoWatcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoWatcher.swift; sourceTree = "<group>"; };
 		871C02B9E9DD13DFF3E81F56 /* UncommitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UncommitApp.swift; sourceTree = "<group>"; };
 		8EC706DBCADD9342AF019327 /* ShellExecutorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellExecutorTests.swift; sourceTree = "<group>"; };
 		92F09D33EA4724B259F27BDA /* PopoverContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverContentView.swift; sourceTree = "<group>"; };
@@ -80,6 +83,7 @@
 		AE61E1B74CB988A22CC10AC4 /* ShellExecutor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellExecutor.swift; sourceTree = "<group>"; };
 		AF6398AD04B4EAF9FF6ED121 /* LaunchAtLoginHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLoginHelper.swift; sourceTree = "<group>"; };
 		BE3613A5DABCF97799B0E30D /* CommitsWindowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommitsWindowView.swift; sourceTree = "<group>"; };
+		BE7A95E0A7B9DE9B4F0F7FF1 /* RepoWatcherTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoWatcherTests.swift; sourceTree = "<group>"; };
 		C02A3B14B23B2C725867A36E /* EditorHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditorHelper.swift; sourceTree = "<group>"; };
 		C501DB6BA90CCDDFF8407043 /* PersistenceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PersistenceService.swift; sourceTree = "<group>"; };
 		CBBAEB17AC0C6AF72D16046A /* GitService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitService.swift; sourceTree = "<group>"; };
@@ -116,6 +120,7 @@
 				7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */,
 				22DACAFFEE085E92546D57C5 /* RepoGroupingTests.swift */,
 				3B8D2417013790724F5964B6 /* RepoHealthTests.swift */,
+				BE7A95E0A7B9DE9B4F0F7FF1 /* RepoWatcherTests.swift */,
 				8EC706DBCADD9342AF019327 /* ShellExecutorTests.swift */,
 			);
 			path = UncommitTests;
@@ -143,6 +148,7 @@
 				C501DB6BA90CCDDFF8407043 /* PersistenceService.swift */,
 				398EB01EAA9615741D561918 /* RepoDiscoveryService.swift */,
 				14E644627127110093E71922 /* RepoMonitor.swift */,
+				8088EA236364B3754D3E1ED1 /* RepoWatcher.swift */,
 				AE61E1B74CB988A22CC10AC4 /* ShellExecutor.swift */,
 			);
 			path = Services;
@@ -295,6 +301,7 @@
 				F41B3525C40FE36B401C7E28 /* RepoMonitor.swift in Sources */,
 				2C23A3E188A4DD3F20AED093 /* RepoRowView.swift in Sources */,
 				A96985847D75DA8657AD05A7 /* RepoState.swift in Sources */,
+				0BF620471D50315A659687D2 /* RepoWatcher.swift in Sources */,
 				8494643F17855F5CD0AE99DB /* SettingsView.swift in Sources */,
 				0A18CAEBE561F9222CE8F6EB /* ShellExecutor.swift in Sources */,
 				CF63EBDEAAB30E7B02FD08CB /* StatusIndicatorView.swift in Sources */,
@@ -312,6 +319,7 @@
 				5E64825FE8A319B96E1BB9CC /* GitStatusParserTests.swift in Sources */,
 				3262CE7003AF45824C86B941 /* RepoGroupingTests.swift in Sources */,
 				4366BE7C30403BE9CB9A664F /* RepoHealthTests.swift in Sources */,
+				C7EDAC6F99B821A00D19A0C1 /* RepoWatcherTests.swift in Sources */,
 				6849FB2FF578494B87C3E79A /* ShellExecutorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -215,18 +215,24 @@ struct SettingsView: View {
 
                     Divider()
 
-                    HStack {
-                        Text("Refresh interval")
-                            .font(.callout)
+                    HStack(alignment: .top) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("Fallback refresh")
+                                .font(.callout)
+                            Text("Local changes appear as they happen. This only catches what file events miss.")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         Spacer()
                         Picker("", selection: Binding(
                             get: { viewModel.configuration.refreshIntervalSeconds },
                             set: { viewModel.setRefreshInterval($0) }
                         )) {
-                            Text("15s").tag(15.0)
                             Text("30s").tag(30.0)
-                            Text("60s").tag(60.0)
                             Text("2m").tag(120.0)
+                            Text("5m").tag(300.0)
+                            Text("15m").tag(900.0)
                         }
                         .frame(width: 80)
                     }
