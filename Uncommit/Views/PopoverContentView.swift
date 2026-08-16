@@ -4,6 +4,7 @@ struct PopoverContentView: View {
     @Environment(AppViewModel.self) private var viewModel
     @State private var showingSettings = false
     @State private var searchText = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -45,6 +46,7 @@ struct PopoverContentView: View {
                     }
                     .buttonStyle(.borderless)
                     .disabled(viewModel.isPullingAll)
+                    .accessibilityLabel("Pull all repositories with incoming commits")
                     .help(viewModel.isPullingAll
                           ? "Pulling…"
                           : "Pull all repositories with incoming commits (fast-forward)")
@@ -58,7 +60,9 @@ struct PopoverContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isRefreshing)
-                .help("Refresh all repositories")
+                .keyboardShortcut("r", modifiers: .command)
+                .help("Refresh all repositories (⌘R)")
+                .accessibilityLabel("Refresh all repositories")
 
                 Button {
                     Task { await viewModel.checkAllRemotes() }
@@ -68,7 +72,9 @@ struct PopoverContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(viewModel.isCheckingAllRemotes)
-                .help("Fetch all remotes")
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+                .help("Fetch all remotes (⇧⌘R)")
+                .accessibilityLabel("Fetch all remotes")
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -79,6 +85,9 @@ struct PopoverContentView: View {
                         .font(.system(size: 12))
                 }
                 .buttonStyle(.borderless)
+                .keyboardShortcut(",", modifiers: .command)
+                .help(showingSettings ? "Close settings (⌘,)" : "Settings (⌘,)")
+                .accessibilityLabel(showingSettings ? "Close settings" : "Settings")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -98,6 +107,9 @@ struct PopoverContentView: View {
                     TextField("Search repositories…", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 12))
+                        .focused($searchFocused)
+                        .onExitCommand { searchText = "" }
+                        .accessibilityLabel("Search repositories")
                     if !searchText.isEmpty {
                         Button {
                             searchText = ""
@@ -107,12 +119,22 @@ struct PopoverContentView: View {
                                 .font(.system(size: 12))
                         }
                         .buttonStyle(.borderless)
+                        .accessibilityLabel("Clear search")
                     }
 
                     displayModeToggle
+
+                    // ⌘F has nowhere else to live: an accessory app has no
+                    // menu bar to hang a Find command off.
+                    Button("") { searchFocused = true }
+                        .keyboardShortcut("f", modifiers: .command)
+                        .opacity(0)
+                        .frame(width: 0, height: 0)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+                .onAppear { searchFocused = true }
 
                 Divider()
 
@@ -140,6 +162,7 @@ struct PopoverContentView: View {
         }
         .buttonStyle(.borderless)
         .help(grouped ? "Show as a single list" : "Group by root folder")
+        .accessibilityLabel(grouped ? "Show as a single list" : "Group by root folder")
     }
 
     /// "Updated 12s ago" — refreshes once per second via TimelineView so the

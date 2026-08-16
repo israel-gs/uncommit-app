@@ -1,21 +1,19 @@
 import SwiftUI
 
+/// The per-row health indicator.
+///
+/// It used to be a bare coloured circle, which made colour the only carrier of
+/// the meaning — unusable with red-green colour blindness, and `.remoteOutOfSync`
+/// and `.error` are both red anyway. Each level now has its own glyph as well,
+/// the same vocabulary the menu bar icon uses, plus a label for VoiceOver.
 struct StatusIndicatorView: View {
     let healthLevel: RepoHealthLevel
 
     var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 8, height: 8)
-    }
-
-    private var color: Color {
-        switch healthLevel {
-        case .clean: return .green
-        case .unpushed: return .blue
-        case .localChanges: return .orange
-        case .remoteOutOfSync: return .red
-        case .error: return .red.opacity(0.6)
-        }
+        Image(systemName: MenuBarIconProvider.symbolName(for: healthLevel))
+            .font(.system(size: 10))
+            .foregroundStyle(MenuBarIconProvider.color(for: healthLevel))
+            .help(MenuBarIconProvider.description(for: healthLevel))
+            .accessibilityLabel(MenuBarIconProvider.description(for: healthLevel))
     }
 }

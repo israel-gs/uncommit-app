@@ -20,4 +20,18 @@ enum MenuBarIconProvider {
         case .error: return .red
         }
     }
+
+    /// Spoken description of a health level, and the tooltip behind the dot.
+    /// The colour alone carried this meaning, which left it unreadable to
+    /// anyone with red-green colour blindness — and `.remoteOutOfSync` and
+    /// `.error` are the same red.
+    static func description(for health: RepoHealthLevel) -> String {
+        switch health {
+        case .clean: return "Clean"
+        case .unpushed: return "Unpushed commits"
+        case .localChanges: return "Local changes"
+        case .remoteOutOfSync: return "Behind the remote"
+        case .error: return "Could not be read"
+        }
+    }
 }

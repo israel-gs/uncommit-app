@@ -307,6 +307,7 @@ struct SettingsView: View {
                 }
                 .font(.callout)
                 .foregroundStyle(.red)
+                .keyboardShortcut("q", modifiers: .command)
             }
             .padding(12)
         }

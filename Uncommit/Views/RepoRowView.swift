@@ -315,6 +315,7 @@ struct StatusBadge: View {
             }
         }
         .help(tooltipText)
+        .accessibilityLabel("\(count) \(label)")
     }
 
     private var badgeContent: some View {
@@ -447,6 +448,7 @@ struct SubmoduleRow: View {
                 .buttonStyle(.borderless)
                 .disabled(isBusy)
                 .help("Sync submodule to the commit the parent records (git submodule update)")
+                .accessibilityLabel("Sync submodule \(change.name)")
             }
         }
     }
@@ -518,6 +520,7 @@ struct CommitsBadge: View {
         }
         .buttonStyle(.borderless)
         .help("\(title) — click to view commits")
+        .accessibilityLabel("\(title) in \(repoName)")
     }
 }
 
@@ -546,6 +549,7 @@ struct BranchPicker: View {
         }
         .buttonStyle(.borderless)
         .help("Switch branch")
+        .accessibilityLabel("Branch \(currentBranch). Switch branch")
         .popover(isPresented: $showing, arrowEdge: .bottom) { popover }
     }
 
