@@ -38,6 +38,15 @@ private final class DataBuffer: Sendable {
     }
 }
 
+/// Thread-safe one-shot flag. Set by the timeout watchdog and read by the
+/// termination handler, which run on different queues.
+private final class FlagBox: Sendable {
+    private let lock = OSAllocatedUnfairLock(initialState: false)
+
+    func set() { lock.withLock { $0 = true } }
+    var isSet: Bool { lock.withLock { $0 } }
+}
+
 /// Thread-safe one-shot continuation wrapper.
 private final class ContinuationBox: Sendable {
     private let lock: OSAllocatedUnfairLock<CheckedContinuation<String, Error>?>
@@ -116,6 +125,9 @@ enum ShellExecutor {
             let box = ContinuationBox(continuation)
             let stdoutBuffer = DataBuffer()
             let stderrBuffer = DataBuffer()
+            // Set before we signal the process, so the termination handler can
+            // tell "we killed it" from "it failed on its own".
+            let timedOut = FlagBox()
 
             let process = Process()
             let stdoutPipe = Pipe()
@@ -160,6 +172,11 @@ enum ShellExecutor {
                 if proc.terminationStatus == 0 {
                     logger.debug("✓ \(command) \(argsSummary) done [\(String(format: "%.2f", elapsed))s]")
                     box.resume(returning: stdoutBuffer.toString())
+                } else if timedOut.isSet {
+                    // We SIGTERM'd it, so terminationStatus is just our signal.
+                    // Reporting "Exit code 15:" here told the user nothing.
+                    logger.warning("⏱ \(command) \(argsSummary) timed out after \(timeout)s")
+                    box.resume(throwing: ShellError.timeout)
                 } else {
                     let stderr = stderrBuffer.toString()
                     logger.warning("✗ \(command) \(argsSummary) exit=\(proc.terminationStatus) [\(String(format: "%.2f", elapsed))s] stderr: \(stderr)")
@@ -184,6 +201,7 @@ enum ShellExecutor {
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { [process] in
                 if process.isRunning {
                     logger.warning("⏱ Timeout (\(timeout)s) — sending SIGTERM to \(command) \(argsSummary)")
+                    timedOut.set()
                     process.terminate()
                     // If still alive after 2s (git ignoring SIGTERM), force kill
                     DispatchQueue.global().asyncAfter(deadline: .now() + 2) {

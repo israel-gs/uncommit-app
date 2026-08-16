@@ -121,6 +121,85 @@ final class GitStatusParserTests: XCTestCase {
         XCTAssertFalse(result.untracked.contains("ignored.log"))
     }
 
+    // MARK: - Branch headers (--branch)
+
+    // Real `git status --porcelain=v2 --branch -z` output: headers are
+    // NUL-terminated too, so they tokenize alongside the entries.
+    private func headers(
+        head: String = "main",
+        upstream: String? = "origin/main",
+        ab: String? = "+0 -0"
+    ) -> String {
+        var out = "# branch.oid abc123\0# branch.head \(head)\0"
+        if let upstream { out += "# branch.upstream \(upstream)\0" }
+        if let ab { out += "# branch.ab \(ab)\0" }
+        return out
+    }
+
+    func testBranchHeadIsParsed() {
+        let result = GitService.parsePorcelainV2Z(headers(head: "feature/login"))
+        XCTAssertEqual(result.branchName, "feature/login")
+    }
+
+    func testDetachedHeadIsLabelled() {
+        let result = GitService.parsePorcelainV2Z(headers(head: "(detached)"))
+        XCTAssertEqual(result.branchName, "HEAD (detached)")
+    }
+
+    func testAheadBehindParsed() {
+        let result = GitService.parsePorcelainV2Z(headers(ab: "+3 -7"))
+        XCTAssertTrue(result.hasTracking)
+        XCTAssertEqual(result.ahead, 3)
+        XCTAssertEqual(result.behind, 7)
+    }
+
+    func testNoUpstreamMeansNoTrackingAndZeroCounts() {
+        // Git omits branch.upstream AND branch.ab when the branch tracks nothing.
+        let result = GitService.parsePorcelainV2Z(headers(upstream: nil, ab: nil))
+        XCTAssertEqual(result.branchName, "main")
+        XCTAssertFalse(result.hasTracking)
+        XCTAssertEqual(result.ahead, 0)
+        XCTAssertEqual(result.behind, 0)
+    }
+
+    func testHeadersAndEntriesCoexist() {
+        // The headers must not shift entry parsing, and vice versa.
+        let output = headers(ab: "+1 -2")
+            + v2(".M", "modified.swift")
+            + "? untracked.txt\0"
+        let result = GitService.parsePorcelainV2Z(output)
+        XCTAssertEqual(result.branchName, "main")
+        XCTAssertEqual(result.ahead, 1)
+        XCTAssertEqual(result.behind, 2)
+        XCTAssertEqual(result.modified, ["modified.swift"])
+        XCTAssertEqual(result.untracked, ["untracked.txt"])
+    }
+
+    func testUntrackedFileStartingWithHashIsNotAHeader() {
+        // A path may begin with "#" — only the record marker decides.
+        let result = GitService.parsePorcelainV2Z("? #notes.md\0")
+        XCTAssertEqual(result.untracked, ["#notes.md"])
+        XCTAssertNil(result.branchName)
+    }
+
+    func testUnknownHeaderIsIgnored() {
+        let result = GitService.parsePorcelainV2Z("# branch.somethingNew value\0" + v2(".M", "a.swift"))
+        XCTAssertEqual(result.modified, ["a.swift"])
+        XCTAssertNil(result.branchName)
+    }
+
+    // MARK: - Display capping
+
+    func testParserItselfNeverCaps() {
+        // Capping belongs to fullStatus, which reads the true counts off these
+        // uncapped lists first. A parser that capped made every bucket past the
+        // cap report 51.
+        let output = (1...120).map { v2(".M", "file\($0).swift") }.joined()
+        let result = GitService.parsePorcelainV2Z(output)
+        XCTAssertEqual(result.modified.count, 120)
+        XCTAssertFalse(result.modified.contains { $0.hasPrefix("... and") })
+    }
+
     // MARK: - Submodules
 
     func testSubmodulePointerChangeIsNotAFile() {

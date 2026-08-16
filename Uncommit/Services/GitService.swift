@@ -17,43 +17,59 @@ enum GitService {
         return result.isEmpty ? "HEAD (detached)" : result
     }
 
-    /// Parsed working-tree status. File buckets are display-capped; submodules
-    /// are never capped (they're rare and few).
+    /// Parsed working-tree status plus the branch facts `--branch` reports.
+    /// File buckets are UNCAPPED here — `fullStatus` reads the true counts off
+    /// them and caps only the copies it shows. Submodules are never capped
+    /// (they're rare and few).
     struct LocalStatus: Equatable {
         var staged: [String] = []
         var modified: [String] = []
         var untracked: [String] = []
         var conflicts: [String] = []
         var submodules: [SubmoduleChange] = []
+        /// From `# branch.head`. nil only if the header is absent.
+        var branchName: String?
+        /// True when `# branch.upstream` is present — the branch tracks a remote.
+        var hasTracking: Bool = false
+        /// From `# branch.ab`. Both stay zero when there's no upstream.
+        var ahead: Int = 0
+        var behind: Int = 0
     }
 
-    static func localStatus(at repoPath: String) async throws -> LocalStatus {
-        // porcelain=v2 carries a per-entry submodule field (`N...` vs `S<c><m><u>`)
-        // that v1 lacks, letting us tell a submodule pointer change apart from a
-        // plain modified file. -z keeps paths NUL-delimited and never C-escaped.
+    /// Working-tree status AND branch/ahead/behind in a SINGLE git invocation.
+    ///
+    /// `--branch` prepends `# branch.*` headers carrying the current branch,
+    /// whether it tracks a remote, and the ahead/behind counts — the same data
+    /// that used to cost four extra processes (`branch --show-current`,
+    /// `rev-parse @{u}`, and two `rev-list --count`). Polling one repo every 30s
+    /// went from 5 process spawns per cycle to 1.
+    ///
+    /// `porcelain=v2` carries a per-entry submodule field (`N...` vs
+    /// `S<c><m><u>`) that v1 lacks, letting us tell a submodule pointer change
+    /// apart from a plain modified file. `-z` NUL-delimits every record —
+    /// headers included — and never C-escapes paths.
+    static func status(at repoPath: String) async throws -> LocalStatus {
         let output = try await ShellExecutor.run(
-            "git", arguments: ["status", "--porcelain=v2", "-z"],
+            "git", arguments: ["status", "--porcelain=v2", "--branch", "-z"],
             workingDirectory: repoPath
         )
-
-        var parsed = parsePorcelainV2Z(output)
-        parsed.staged = capFiles(parsed.staged)
-        parsed.modified = capFiles(parsed.modified)
-        parsed.untracked = capFiles(parsed.untracked)
-        parsed.conflicts = capFiles(parsed.conflicts)
-        return parsed
+        return parsePorcelainV2Z(output)
     }
 
-    /// Pure parser for `git status --porcelain=v2 -z` output. Extracted so it
-    /// can be unit-tested without shelling out. Returns uncapped lists.
+    /// Pure parser for `git status --porcelain=v2 --branch -z` output. Extracted
+    /// so it can be unit-tested without shelling out. Returns uncapped lists.
     ///
     /// Record forms (each NUL-terminated; `-z` is assumed):
     ///   `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>`        ordinary change
     ///   `2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <Xscore> <path>\0<orig>`  rename/copy
     ///   `u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>`         unmerged
     ///   `? <path>` untracked   `! <path>` ignored
+    ///   `# <key> <value>` header (only with `--branch`)
     /// `<sub>` is `N...` for a normal path or `S<c><m><u>` for a submodule,
     /// where c=commit changed, m=modified content, u=untracked content.
+    /// Only headers start with `#` — every entry marker is `1`/`2`/`u`/`?`/`!`,
+    /// and a rename's second token is consumed by its own record — so a path
+    /// beginning with `#` can never be mistaken for one.
     static func parsePorcelainV2Z(_ output: String) -> LocalStatus {
         var result = LocalStatus()
         guard !output.isEmpty else { return result }
@@ -88,13 +104,44 @@ enum GitService {
                     result.untracked.append(path)
                 }
                 i += 1
+            case "#":
+                parseBranchHeader(token, into: &result)
+                i += 1
             default:
-                // "!" ignored entries and any header line — skip.
+                // "!" ignored entries — skip.
                 i += 1
             }
         }
 
         return result
+    }
+
+    /// Reads one `# <key> <value>` header from `--branch`. Keys we don't use
+    /// (`branch.oid`, plus anything git adds later) are ignored.
+    ///
+    /// `branch.upstream` appears only when the branch tracks a remote, and
+    /// `branch.ab` only alongside it — so their absence IS the "no tracking
+    /// branch" signal, and ahead/behind correctly stay at zero.
+    private static func parseBranchHeader(_ token: String, into result: inout LocalStatus) {
+        let parts = token.split(separator: " ").map(String.init)
+        guard parts.count >= 3 else { return }
+
+        switch parts[1] {
+        case "branch.head":
+            // Refnames can't contain spaces, but join defensively. Git reports
+            // a detached HEAD as "(detached)".
+            let name = parts[2...].joined(separator: " ")
+            result.branchName = name == "(detached)" ? "HEAD (detached)" : name
+        case "branch.upstream":
+            result.hasTracking = true
+        case "branch.ab":
+            // "+<ahead> -<behind>" — drop the sign character off each.
+            guard parts.count >= 4 else { return }
+            result.ahead = Int(parts[2].dropFirst()) ?? 0
+            result.behind = Int(parts[3].dropFirst()) ?? 0
+        default:
+            break
+        }
     }
 
     /// Splits a porcelain v2 record into its leading space-separated header
@@ -180,28 +227,6 @@ enum GitService {
     private static func capFiles(_ files: [String]) -> [String] {
         guard files.count > maxFileNamesPerCategory else { return files }
         return Array(files.prefix(maxFileNamesPerCategory)) + ["... and \(files.count - maxFileNamesPerCategory) more"]
-    }
-
-    static func aheadBehind(at repoPath: String) async throws -> (ahead: Int, behind: Int, hasTracking: Bool) {
-        do {
-            _ = try await ShellExecutor.run(
-                "git", arguments: ["rev-parse", "--abbrev-ref", "@{u}"],
-                workingDirectory: repoPath
-            )
-        } catch {
-            return (0, 0, false)
-        }
-
-        let aheadStr = try await ShellExecutor.run(
-            "git", arguments: ["rev-list", "--count", "@{u}..HEAD"],
-            workingDirectory: repoPath
-        )
-        let behindStr = try await ShellExecutor.run(
-            "git", arguments: ["rev-list", "--count", "HEAD..@{u}"],
-            workingDirectory: repoPath
-        )
-
-        return (Int(aheadStr) ?? 0, Int(behindStr) ?? 0, true)
     }
 
     static func fetch(at repoPath: String) async throws {
@@ -316,41 +341,48 @@ enum GitService {
         logger.debug("⬆️ push DONE  — \(shortName) [\(String(format: "%.2f", elapsed))s]")
     }
 
-    /// Runs all status checks in parallel. Returns Result to never throw.
+    /// Everything the UI needs for one repo, from a single `git status` call.
+    /// Returns Result to never throw.
     static func fullStatus(at repoPath: String) async -> Result<GitRepoStatus, Error> {
         let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
         let start = CFAbsoluteTimeGetCurrent()
         logger.debug("📋 fullStatus START — \(shortName)")
 
         do {
-            // Run independent git commands in parallel
-            async let branch = currentBranch(at: repoPath)
-            async let local = localStatus(at: repoPath)
-            async let remote = aheadBehind(at: repoPath)
+            let parsed = try await status(at: repoPath)
 
-            let branchName = try await branch
-            let localStatus = try await local
-            let (ahead, behind, hasTracking) = try await remote
+            // `--branch` always emits `# branch.head`; this is belt-and-braces.
+            // (`??` can't wrap the fallback — its autoclosure isn't async.)
+            let branchName: String
+            if let headerBranch = parsed.branchName {
+                branchName = headerBranch
+            } else {
+                branchName = (try? await currentBranch(at: repoPath)) ?? "HEAD (detached)"
+            }
 
             // Only touches disk when the repo actually has changed submodules.
-            let submodules = await enrichSubmodules(localStatus.submodules, parentPath: repoPath)
+            let submodules = await enrichSubmodules(parsed.submodules, parentPath: repoPath)
 
             let elapsed = CFAbsoluteTimeGetCurrent() - start
-            logger.debug("📋 fullStatus DONE  — \(shortName) branch=\(branchName) staged=\(localStatus.staged.count) mod=\(localStatus.modified.count) untracked=\(localStatus.untracked.count) submodules=\(submodules.count) ahead=\(ahead) behind=\(behind) [\(String(format: "%.2f", elapsed))s]")
+            logger.debug("📋 fullStatus DONE  — \(shortName) branch=\(branchName) staged=\(parsed.staged.count) mod=\(parsed.modified.count) untracked=\(parsed.untracked.count) submodules=\(submodules.count) ahead=\(parsed.ahead) behind=\(parsed.behind) [\(String(format: "%.2f", elapsed))s]")
 
+            // Counts come off the UNCAPPED lists; only the name lists we display
+            // are truncated. Taking `.count` from a capped array reported 51 for
+            // every bucket past the cap, the synthetic "... and N more" entry
+            // included.
             let status = GitRepoStatus(
                 branchName: branchName,
-                stagedFiles: localStatus.staged,
-                modifiedFiles: localStatus.modified,
-                untrackedFiles: localStatus.untracked,
-                conflictFiles: localStatus.conflicts,
-                stagedCount: localStatus.staged.count,
-                modifiedCount: localStatus.modified.count,
-                untrackedCount: localStatus.untracked.count,
-                conflictCount: localStatus.conflicts.count,
-                aheadCount: ahead,
-                behindCount: behind,
-                hasRemoteTrackingBranch: hasTracking,
+                stagedFiles: capFiles(parsed.staged),
+                modifiedFiles: capFiles(parsed.modified),
+                untrackedFiles: capFiles(parsed.untracked),
+                conflictFiles: capFiles(parsed.conflicts),
+                stagedCount: parsed.staged.count,
+                modifiedCount: parsed.modified.count,
+                untrackedCount: parsed.untracked.count,
+                conflictCount: parsed.conflicts.count,
+                aheadCount: parsed.ahead,
+                behindCount: parsed.behind,
+                hasRemoteTrackingBranch: parsed.hasTracking,
                 submodules: submodules
             )
             return .success(status)
