@@ -24,7 +24,7 @@ final class RepoHealthTests: XCTestCase {
     // MARK: - An error must not erase a known status
 
     func testErrorDoesNotOverrideAKnownStatus() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let r = repo("api")
         vm.repositories = [r]
         vm.syncRepoStates()
@@ -37,7 +37,7 @@ final class RepoHealthTests: XCTestCase {
     }
 
     func testRepoWithNoStatusAtAllReportsError() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let r = repo("broken")
         vm.repositories = [r]
         vm.syncRepoStates()
@@ -51,7 +51,7 @@ final class RepoHealthTests: XCTestCase {
     func testOneFailingRemoteDoesNotPaintTheWholeMenuBarRed() {
         // The case automatic remote checks make routine: a repo whose fetch
         // fails but whose working tree we last saw clean.
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let clean = repo("clean")
         let flaky = repo("flaky")
         vm.repositories = [clean, flaky]
@@ -64,7 +64,7 @@ final class RepoHealthTests: XCTestCase {
     }
 
     func testUnreadableRepoStillReachesTheMenuBar() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let clean = repo("clean")
         let gone = repo("gone")
         vm.repositories = [clean, gone]
@@ -77,7 +77,7 @@ final class RepoHealthTests: XCTestCase {
 
     func testStillLoadingReposDoNotColourTheIcon() {
         // On launch nothing has a status yet; the icon must not flash red.
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         vm.repositories = [repo("a"), repo("b")]
         vm.syncRepoStates()
 
@@ -90,7 +90,7 @@ final class RepoHealthTests: XCTestCase {
     /// observable object, so writing one repo's status can't reach another's
     /// observers.
     func testEachRepoGetsItsOwnStateObject() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let a = repo("a"), b = repo("b")
         vm.repositories = [a, b]
         vm.syncRepoStates()
@@ -107,7 +107,7 @@ final class RepoHealthTests: XCTestCase {
 
     func testStateSurvivesRepeatedSyncs() {
         // Re-syncing on every repo add/remove must not wipe what we already know.
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let a = repo("a")
         vm.repositories = [a]
         vm.syncRepoStates()
@@ -121,7 +121,7 @@ final class RepoHealthTests: XCTestCase {
     }
 
     func testRemovingARepoDropsItsState() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let a = repo("a"), b = repo("b")
         vm.repositories = [a, b]
         vm.syncRepoStates()
@@ -136,7 +136,7 @@ final class RepoHealthTests: XCTestCase {
     // MARK: - Config migration
 
     func testMigrationEnablesRemoteChecksForAPreVersioningConfig() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         var old = AppConfiguration()
         old.configVersion = 0
         old.autoCheckRemote = false
@@ -151,7 +151,7 @@ final class RepoHealthTests: XCTestCase {
 
     func testMigrationDoesNotReEnableAfterTheUserOptsOut() {
         // Once migrated, turning the toggle off has to stick across launches.
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         var current = AppConfiguration()
         current.configVersion = AppConfiguration.currentVersion
         current.autoCheckRemote = false
@@ -163,7 +163,7 @@ final class RepoHealthTests: XCTestCase {
     }
 
     func testWorstHealthWins() {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         let a = repo("a"), b = repo("b"), c = repo("c")
         vm.repositories = [a, b, c]
         vm.syncRepoStates()

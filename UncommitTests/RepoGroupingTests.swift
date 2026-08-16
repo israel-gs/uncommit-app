@@ -8,7 +8,7 @@ final class RepoGroupingTests: XCTestCase {
         repos: [GitRepository],
         folders: [WatchedFolder]
     ) -> AppViewModel {
-        let vm = AppViewModel()
+        let vm = makeIsolatedViewModel()
         vm.repositories = repos
         vm.watchedFolders = folders
         return vm

@@ -36,7 +36,13 @@ final class AppViewModel {
 
     private let discoveryService = RepoDiscoveryService()
     private let monitor = RepoMonitor()
-    private let persistence = PersistenceService()
+    private let persistence: PersistenceService
+
+    /// Persistence is injectable purely so tests can be isolated from the real
+    /// user defaults — see PersistenceService.
+    init(persistence: PersistenceService = PersistenceService()) {
+        self.persistence = persistence
+    }
 
     // MARK: - Path Helpers
 
