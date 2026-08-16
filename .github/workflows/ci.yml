@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        run: xcodegen generate
+
+      # The .xcodeproj is committed so the repo opens without XcodeGen, which
+      # only works if it stays in step with project.yml. Regenerating and
+      # diffing is what keeps that true.
+      - name: Check the committed project is up to date
+        run: |
+          if ! git diff --quiet Uncommit.xcodeproj; then
+            echo "::error::Uncommit.xcodeproj is stale. Run 'xcodegen generate' and commit the result."
+            git diff --stat Uncommit.xcodeproj
+            exit 1
+          fi
+
+      - name: Test
+        run: |
+          xcodebuild test \
+            -project Uncommit.xcodeproj \
+            -scheme Uncommit \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Build (Release)
+        run: |
+          xcodebuild build \
+            -project Uncommit.xcodeproj \
+            -scheme Uncommit \
+            -configuration Release \
+            CODE_SIGNING_ALLOWED=NO

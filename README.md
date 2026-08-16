@@ -13,31 +13,42 @@ A lightweight, native macOS menu bar app that keeps an eye on all your Git repos
 
 ## Features
 
-### Real-time Repository Monitoring
-- Track **staged**, **modified**, **untracked**, and **conflicted** files across all repos
-- **Hover any status badge** to see the exact file names
-- Color-coded health indicators: **green** (clean), **orange** (local changes), **red** (behind remote)
-- Dynamic menu bar icon and dirty-repo count badge
+### Repository monitoring
+- Tracks **staged**, **modified**, **untracked** and **conflicted** files across every repo
+- **Click any status badge** to see the exact file names
+- Changes appear as they happen: a single **FSEvents** stream watches every repo and
+  refreshes only the ones that actually changed, with a periodic sweep as a backstop
+- Health indicators use a distinct glyph *and* colour per state, mirrored in the menu bar
+  icon and the dirty-repo count badge
 
-### Remote Sync Awareness
-- One-click **Check Remote** per repo or **Fetch All** across every repo
-- See how many commits you're **ahead** or **behind** the remote
-- Detects whether a branch has a remote tracking branch
+### Remote sync
+- **Checks remotes automatically** in the background (on by default, every 15 minutes,
+  configurable) so incoming commits show up on their own
+- See how many commits you are **ahead** or **behind**, and click either to read the
+  actual commits in a resizable window
+- **Pull** (always `--ff-only`, never a surprise merge) and **push** per repo, or
+  **Pull all** for everything with incoming commits
+- One-click **Check Remote** per repo, or **Fetch All** across every repo
 
-### Smart Repository Discovery
-- Add repos manually or point to a **root project folder**
-- Recursively discovers all nested Git repos (configurable depth 2–5)
-- Automatically skips `node_modules`, `Pods`, `DerivedData`, `.build`, `vendor`, `dist`, and more
+### Branches and submodules
+- Switch branches from the row, including checking out a remote-only branch
+- Submodules whose pointer, branch or content diverged get their own block — never
+  rendered as a plain "modified file" — with the recorded → checked-out commit range and
+  a one-click `git submodule update`
 
-### Custom Editor Integration
-- Open any repo in your preferred editor — **VS Code**, **Cursor**, **Zed**, **Xcode**, **Sublime Text**, JetBrains IDEs, and 20+ more
-- Set a **global default** editor and **per-repo overrides**
-- Auto-detects installed editors; pick any `.app` with the "Other..." option
+### Organisation
+- Add repos manually or point at a **root folder** and let it discover nested repos
+  (configurable depth 2–5), skipping `node_modules`, `Pods`, `DerivedData` and friends
+- **Pin** repos to the top; repos needing attention float above clean ones
+- **Group by root folder** or show one flat list, and **search** across them
+- Repos whose folder was deleted are dropped automatically — an unmounted volume is not
+  mistaken for a deletion
 
-### Quick Actions
-- **Copy path** to clipboard
-- **Open in Terminal**
-- **Open in editor** (configurable)
+### Editors and shortcuts
+- Open any repo in **VS Code**, **Cursor**, **Zed**, **Xcode**, JetBrains IDEs and 20+
+  more, with a global default and per-repo overrides
+- Right-click any repo for pin, copy path, Show in Finder and open-in-editor
+- ⌘R refresh · ⇧⌘R fetch all · ⌘F search · ⌘, settings · ⌘Q quit
 
 <br>
 
@@ -85,17 +96,27 @@ xcodebuild -project Uncommit.xcodeproj -scheme Uncommit -configuration Release b
 
 The built app will be in `~/Library/Developer/Xcode/DerivedData/Uncommit-*/Build/Products/Release/Uncommit.app`.
 
+Run the test suite:
+
+```bash
+xcodebuild test \
+  -project Uncommit.xcodeproj \
+  -scheme Uncommit \
+  -destination 'platform=macOS'
+```
+
 <br>
 
 ## Project Structure
 
 ```
 Uncommit/
-├── UncommitApp.swift               # App entry point (MenuBarExtra)
+├── UncommitApp.swift                # App entry point (MenuBarExtra + commits window)
 │
 ├── Models/
-│   ├── GitRepository.swift          # Repo model with per-repo editor config
-│   ├── GitStatus.swift              # Status snapshot + health level enum
+│   ├── GitRepository.swift          # Repo model with per-repo editor + pin state
+│   ├── GitStatus.swift              # Status snapshot, submodules, health level
+│   ├── RepoState.swift              # Per-repo observable transient state
 │   ├── AppConfiguration.swift       # Persisted settings + InstalledApp model
 │   └── WatchedFolder.swift          # Root folder for auto-discovery
 │
@@ -103,36 +124,52 @@ Uncommit/
 │   └── AppViewModel.swift           # Central @Observable state manager
 │
 ├── Views/
-│   ├── PopoverContentView.swift     # Main popover container
-│   ├── RepoListView.swift           # Sorted repository list
-│   ├── RepoRowView.swift            # Per-repo row with status + actions
-│   ├── StatusIndicatorView.swift    # Colored health dot
+│   ├── PopoverContentView.swift     # Main popover container + search
+│   ├── RepoListView.swift           # Flat sorted list
+│   ├── GroupedRepoListView.swift    # Grouped-by-root-folder tabs
+│   ├── RepoRowView.swift            # Row: status, branches, submodules, actions
+│   ├── CommitsWindowView.swift      # Shared window listing pending commits
+│   ├── StatusIndicatorView.swift    # Health glyph
 │   ├── SettingsView.swift           # Settings panel with editor picker
 │   └── EmptyStateView.swift         # Onboarding empty state
 │
 ├── Services/
-│   ├── GitService.swift             # Git CLI wrapper (status, fetch, branch)
+│   ├── GitService.swift             # Git CLI wrapper + porcelain v2 parser
 │   ├── ShellExecutor.swift          # Non-blocking Process execution
-│   ├── RepoMonitor.swift            # Polling engine with TaskGroup
+│   ├── RepoMonitor.swift            # Refresh engine (events + fallback sweep)
+│   ├── RepoWatcher.swift            # FSEvents stream over every repo
 │   ├── RepoDiscoveryService.swift   # Recursive .git scanner
 │   └── PersistenceService.swift     # UserDefaults read/write
 │
 └── Utilities/
     ├── EditorHelper.swift           # Editor detection + open-in-app logic
-    ├── MenuBarIconProvider.swift     # SF Symbol + color for menu bar
-    └── Constants.swift              # App-wide constants
+    ├── LaunchAtLoginHelper.swift    # SMAppService login item
+    ├── MenuBarIconProvider.swift    # Symbol, colour and description per health
+    └── Constants.swift              # Shipped defaults
 ```
 
 <br>
 
 ## How It Works
 
-1. **Startup** — The app launches as a menu-bar-only process (`LSUIElement = true`). No Dock icon, no main window.
-2. **Polling** — A configurable timer (default 30s) triggers concurrent `git status --porcelain=v1` checks across all tracked repos using Swift `TaskGroup`.
-3. **Status Parsing** — Porcelain output is parsed line-by-line to extract staged/modified/untracked/conflict file lists and names.
-4. **Remote Checks** — `git fetch --all --prune` followed by `git rev-list --count` to compute ahead/behind counts.
-5. **UI Updates** — `@Observable` view model drives reactive SwiftUI updates. The menu bar icon, color, and badge reflect the worst health across all repos.
-6. **Persistence** — Configuration (repos, folders, editor prefs, intervals) is JSON-encoded to `UserDefaults` after every mutation.
+1. **Startup** — launches as a menu-bar-only process (`LSUIElement = true`). No Dock icon,
+   no main window.
+2. **Watching** — one FSEvents stream covers every tracked repo. When files change, only
+   those repos are re-read, coalesced so a `git checkout` costs one refresh rather than
+   one per file. Build output and dependency directories are filtered out.
+3. **Status** — a single `git status --porcelain=v2 --branch -z` per repo returns the
+   working tree, the current branch, whether it tracks a remote, and the ahead/behind
+   counts. One process per repo, parsed from NUL-delimited records so no filename needs
+   escaping.
+4. **Fallback sweep** — a periodic pass catches whatever file events miss (dropped
+   events, remounted volumes). It is a backstop, not the mechanism.
+5. **Remote checks** — `git fetch --prune` on the branch's own remote, on a background
+   cadence, then a re-read for the new ahead/behind counts.
+6. **UI updates** — each repo owns an `@Observable` state object, so a status update
+   re-renders only that row. The menu bar icon and badge reflect the worst health across
+   every repo.
+7. **Persistence** — configuration is JSON-encoded into `UserDefaults` after every
+   mutation, with a version stamp so shipped defaults can change without resetting it.
 
 <br>
 
@@ -140,10 +177,13 @@ Uncommit/
 
 | Setting | Options | Default |
 |---|---|---|
-| Refresh interval | 15s, 30s, 60s, 2min | 30s |
+| Check remotes automatically | On / off | On |
+| Remote check interval | 5m, 15m, 30m, 1h | 15m |
+| Fallback refresh | 30s, 2m, 5m, 15m | 30s |
 | Discovery scan depth | 2–5 levels | 3 |
 | Default editor | Any installed app | Not set |
 | Per-repo editor | Any installed app | Inherits global |
+| Launch at login | On / off | Off |
 
 All settings are accessible from the **gear icon** in the popover.
 
