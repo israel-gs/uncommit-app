@@ -12,8 +12,13 @@ final class RepoMonitor {
 
     private(set) var isRefreshing = false
     private var isCheckingRemotes = false
-    /// Tracks repos currently being fetched to prevent duplicate operations.
-    private var inFlightRemotePaths: Set<String> = []
+    /// The fetch currently running for each repo, if any.
+    ///
+    /// Two git processes writing `refs/remotes/...` in the same repository race
+    /// each other and one dies with "cannot lock ref". Keeping the Task (rather
+    /// than just a flag) lets a second caller await the one already running
+    /// instead of either racing it or returning with nothing.
+    private var inFlightFetches: [String: Task<Void, Never>] = [:]
 
     /// Max concurrent local status checks (fast, CPU-bound).
     private let maxConcurrentLocal = 6
@@ -236,33 +241,55 @@ final class RepoMonitor {
 
     // MARK: - Remote Check (single repo, with dedup)
 
+    /// Fetches a repo and re-reads it. Every remote check in the app funnels
+    /// through here — the background sweep included — so a repo is never
+    /// fetched twice at once.
     func fetchAndCheckRemote(for repoPath: String) async {
         let shortName = URL(fileURLWithPath: repoPath).lastPathComponent
-        // Skip if this repo is already being fetched
-        guard !inFlightRemotePaths.contains(repoPath) else {
-            logger.debug("🌐 fetchAndCheckRemote skipped — \(shortName) already in-flight")
+
+        // Already fetching: wait for that one and use its result. Returning
+        // early instead would leave the caller thinking it had refreshed.
+        if let existing = inFlightFetches[repoPath] {
+            logger.debug("🌐 fetchAndCheckRemote joining in-flight fetch — \(shortName)")
+            await existing.value
             return
         }
-        inFlightRemotePaths.insert(repoPath)
-        logger.debug("🌐 fetchAndCheckRemote START — \(shortName)")
-        defer {
-            inFlightRemotePaths.remove(repoPath)
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            logger.debug("🌐 fetchAndCheckRemote START — \(shortName)")
+            do {
+                try await GitService.fetch(at: repoPath)
+            } catch {
+                self.onError?(repoPath, error.localizedDescription)
+                logger.debug("🌐 fetchAndCheckRemote END (failed) — \(shortName)")
+                return
+            }
+            self.report(path: repoPath, result: await GitService.fullStatus(at: repoPath))
             logger.debug("🌐 fetchAndCheckRemote END — \(shortName)")
         }
 
-        do {
-            try await GitService.fetch(at: repoPath)
-        } catch {
-            onError?(repoPath, error.localizedDescription)
-            return
-        }
+        inFlightFetches[repoPath] = task
+        await task.value
+        inFlightFetches[repoPath] = nil
+    }
 
-        report(path: repoPath, result: await GitService.fullStatus(at: repoPath))
+    /// Waits until nothing is fetching this repo.
+    ///
+    /// A user-initiated pull or push writes the same refs a fetch does, so
+    /// letting them overlap produces the same "cannot lock ref" failure. These
+    /// must not be skipped like a redundant fetch can be — they wait their turn.
+    func waitForRemoteIdle(_ repoPath: String) async {
+        if let existing = inFlightFetches[repoPath] {
+            await existing.value
+        }
     }
 
     // MARK: - Remote Check All (sliding-window, max 4 concurrent)
 
-    private func fetchAndCheckAllRemotes() async {
+    /// Internal rather than private so the test suite can run it against a
+    /// manual check on the same repo — the exact collision this guards.
+    func fetchAndCheckAllRemotes() async {
         guard !isCheckingRemotes else {
             logger.debug("🌍 fetchAndCheckAllRemotes skipped — already in progress")
             return
@@ -279,37 +306,22 @@ final class RepoMonitor {
         let repos = repositories
         guard !repos.isEmpty else { return }
 
-        await withTaskGroup(of: (String, Result<GitRepoStatus, Error>).self) { group in
+        // Routed through fetchAndCheckRemote so the sweep shares the in-flight
+        // guard with everything else. Calling GitService.fetch directly here let
+        // the sweep and a manual check hit the same repo at once.
+        await withTaskGroup(of: Void.self) { group in
             var index = 0
 
-            // Seed initial batch
             while index < min(maxConcurrentRemote, repos.count) {
                 let path = repos[index].path
-                group.addTask {
-                    do {
-                        try await GitService.fetch(at: path)
-                    } catch {
-                        return (path, .failure(error))
-                    }
-                    return (path, await GitService.fullStatus(at: path))
-                }
+                group.addTask { await self.fetchAndCheckRemote(for: path) }
                 index += 1
             }
 
-            // As each completes, report result and add next repo
-            for await (path, result) in group {
-                report(path: path, result: result)
-
+            for await _ in group {
                 if index < repos.count {
                     let nextPath = repos[index].path
-                    group.addTask {
-                        do {
-                            try await GitService.fetch(at: nextPath)
-                        } catch {
-                            return (nextPath, .failure(error))
-                        }
-                        return (nextPath, await GitService.fullStatus(at: nextPath))
-                    }
+                    group.addTask { await self.fetchAndCheckRemote(for: nextPath) }
                     index += 1
                 }
             }

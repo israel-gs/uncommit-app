@@ -477,6 +477,7 @@ final class AppViewModel {
 
             func pull(_ repo: GitRepository) {
                 group.addTask {
+                    await self.monitor.waitForRemoteIdle(repo.path)
                     do {
                         try await GitService.pull(at: repo.path)
                         return (repo.id, nil)
@@ -513,6 +514,9 @@ final class AppViewModel {
     func pull(_ repo: GitRepository) async {
         logger.info("👤 User action: Pull — \(repo.displayName)")
         setCheckingRemote(true, for: repo.id)
+        // A background fetch writes the same refs; overlapping them fails
+        // with "cannot lock ref".
+        await monitor.waitForRemoteIdle(repo.path)
         defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.pull(at: repo.path)
@@ -526,6 +530,9 @@ final class AppViewModel {
     func push(_ repo: GitRepository) async {
         logger.info("👤 User action: Push — \(repo.displayName)")
         setCheckingRemote(true, for: repo.id)
+        // A background fetch writes the same refs; overlapping them fails
+        // with "cannot lock ref".
+        await monitor.waitForRemoteIdle(repo.path)
         defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.push(at: repo.path)
@@ -541,6 +548,9 @@ final class AppViewModel {
     func syncSubmodule(_ repo: GitRepository, submodule name: String) async {
         logger.info("👤 User action: Submodule update \(name) — \(repo.displayName)")
         setCheckingRemote(true, for: repo.id)
+        // A background fetch writes the same refs; overlapping them fails
+        // with "cannot lock ref".
+        await monitor.waitForRemoteIdle(repo.path)
         defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.updateSubmodule(at: repo.path, submodule: name)
@@ -554,6 +564,9 @@ final class AppViewModel {
     func checkout(_ repo: GitRepository, to branch: String) async {
         logger.info("👤 User action: Checkout \(branch) — \(repo.displayName)")
         setCheckingRemote(true, for: repo.id)
+        // A background fetch writes the same refs; overlapping them fails
+        // with "cannot lock ref".
+        await monitor.waitForRemoteIdle(repo.path)
         defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.checkout(at: repo.path, branch: branch)
