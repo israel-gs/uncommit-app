@@ -98,6 +98,11 @@ final class RepoWatcherTests: XCTestCase {
         try FileManager.default.createDirectory(at: modules, withIntermediateDirectories: true)
         watcher.start(paths: [root.path])
 
+        // Creating those directories changed the repo root too, and that event
+        // is legitimately reported. Let the backlog drain before attaching the
+        // handler, so what follows measures the filter and not the startup.
+        try await Task.sleep(for: .seconds(2))
+
         let fired = expectation(description: "watcher stayed quiet")
         fired.isInverted = true
         watcher.onRepositoriesChanged = { _ in fired.fulfill() }

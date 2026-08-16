@@ -764,6 +764,13 @@ final class AppViewModel {
         repositories.first(where: { $0.id == repo.id })?.isPinned ?? false
     }
 
+    /// Clears the error shown on a row. The status underneath is untouched —
+    /// this only dismisses the message, which otherwise sat there until some
+    /// later refresh happened to succeed.
+    func dismissError(for repo: GitRepository) {
+        setError(nil, for: repo.id)
+    }
+
     func reportEditorError(for repo: GitRepository, message: String) {
         setError(message, for: repo.id)
         let id = repo.id

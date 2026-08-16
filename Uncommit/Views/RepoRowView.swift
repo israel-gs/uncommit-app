@@ -96,20 +96,10 @@ struct RepoRowView: View {
                 // Show transient errors (e.g. failed fetch / push) alongside
                 // the last-known status so the user knows data may be stale.
                 if let error = error {
-                    HStack(spacing: 4) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption2)
-                        Text(error)
-                            .font(.caption2)
-                            .lineLimit(2)
-                    }
-                    .foregroundStyle(.red)
+                    errorLine(error)
                 }
             } else if let error = error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .lineLimit(2)
+                errorLine(error)
             } else {
                 HStack(spacing: 6) {
                     ProgressView()
@@ -121,24 +111,15 @@ struct RepoRowView: View {
                 }
             }
 
-            // Action buttons
+            // Action bar: only what is contextual right now. Everything
+            // else moved to the context menu — seven fixed buttons per row
+            // made a 380pt popover unreadable.
             HStack(spacing: 8) {
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        viewModel.togglePin(for: repo)
-                    }
-                } label: {
-                    Image(systemName: repo.isPinned ? "pin.fill" : "pin")
-                        .font(.caption)
-                        .foregroundStyle(repo.isPinned ? .orange : .secondary)
-                }
-                .buttonStyle(.borderless)
-                .help(repo.isPinned ? "Unpin" : "Pin to top")
+                editorButton
 
                 Spacer()
 
-                // Pull/push are conditional: shown only when relevant. Pull
-                // uses --ff-only so it never produces surprise merge commits.
+                // Pull uses --ff-only so it never produces surprise merges.
                 if let status = status, status.hasRemoteTrackingBranch {
                     if status.behindCount > 0 {
                         Button {
@@ -153,11 +134,11 @@ struct RepoRowView: View {
                         .buttonStyle(.borderless)
                         .disabled(isCheckingRemote)
                         .help("Pull (fast-forward)")
+                        .accessibilityLabel("Pull \(status.behindCount) commits into \(repo.displayName)")
                     }
                     if status.aheadCount > 0 {
-                        // Push will be rejected by git if the remote has new
-                        // commits we haven't pulled, so we disable it and
-                        // tell the user to pull first.
+                        // Git rejects a push when the remote has commits we
+                        // haven't pulled, so disable it and say why.
                         let pushBlocked = status.behindCount > 0
                         Button {
                             Task { await viewModel.push(repo) }
@@ -173,52 +154,93 @@ struct RepoRowView: View {
                         .help(pushBlocked
                               ? "Pull first — remote has \(status.behindCount) new commit(s)"
                               : "Push")
+                        .accessibilityLabel("Push \(status.aheadCount) commits from \(repo.displayName)")
                     }
                 }
 
                 Button {
                     Task { await viewModel.checkRemote(for: repo) }
                 } label: {
-                    HStack(spacing: 2) {
-                        if isCheckingRemote {
-                            ProgressView()
-                                .scaleEffect(0.5)
-                                .frame(width: 10, height: 10)
-                        } else {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        Text("Check Remote")
+                    if isCheckingRemote {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 12, height: 12)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.caption)
                     }
-                    .font(.caption)
                 }
                 .buttonStyle(.borderless)
                 .disabled(isCheckingRemote)
-
-                Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(repo.path, forType: .string)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .help("Copy path")
-
-                editorButton
-
-                Button {
-                    revealInFinder(repo.path)
-                } label: {
-                    Image(systemName: "folder")
-                        .font(.caption)
-                }
-                .buttonStyle(.borderless)
-                .help("Show in Finder")
+                .help("Check remote")
+                .accessibilityLabel("Check remote for \(repo.displayName)")
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .contentShape(Rectangle())
+        .contextMenu { contextMenuItems }
+    }
+
+    // MARK: - Context menu
+
+    /// The actions that used to sit permanently in the row. They're all
+    /// one-shot commands with obvious names, which is exactly what a context
+    /// menu is for.
+    @ViewBuilder
+    private var contextMenuItems: some View {
+        if let editorId = EditorHelper.effectiveEditorBundleId(
+            repo: repo,
+            globalDefault: viewModel.configuration.defaultEditorBundleId
+        ) {
+            Button("Open in \(EditorHelper.editorName(for: editorId) ?? "editor")") {
+                openInEditor(editorId)
+            }
+        }
+        Button("Show in Finder") { revealInFinder(repo.path) }
+        Button("Copy path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(repo.path, forType: .string)
+        }
+
+        Divider()
+
+        Button(repo.isPinned ? "Unpin" : "Pin to top") {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                viewModel.togglePin(for: repo)
+            }
+        }
+        Button("Check remote") {
+            Task { await viewModel.checkRemote(for: repo) }
+        }
+        .disabled(isCheckingRemote)
+    }
+
+    // MARK: - Error line
+
+    /// The last failure, with the full text on hover (it's usually longer than
+    /// two lines) and a way to get rid of it. Errors used to sit there until a
+    /// refresh happened to clear them.
+    private func errorLine(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 4) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.caption2)
+            Text(message)
+                .font(.caption2)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Button {
+                viewModel.dismissError(for: repo)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8))
+            }
+            .buttonStyle(.borderless)
+            .help("Dismiss")
+            .accessibilityLabel("Dismiss error for \(repo.displayName)")
+        }
+        .foregroundStyle(.red)
+        .help(message)
     }
 
     @ViewBuilder
@@ -233,12 +255,7 @@ struct RepoRowView: View {
             let installed = icon != nil
             let editorName = EditorHelper.editorName(for: editorId) ?? "editor"
             Button {
-                if !EditorHelper.openInEditor(path: repo.path, bundleId: editorId) {
-                    viewModel.reportEditorError(
-                        for: repo,
-                        message: "\(editorName) is not installed"
-                    )
-                }
+                openInEditor(editorId)
             } label: {
                 if let icon {
                     Image(nsImage: icon)
@@ -258,9 +275,17 @@ struct RepoRowView: View {
         }
     }
 
+    /// Selects the folder in its parent window, which is what "Show in Finder"
+    /// means everywhere else on the system. `open(_:)` opened the folder
+    /// instead, showing its contents.
     private func revealInFinder(_ path: String) {
-        // Open the folder in a Finder window showing its contents.
-        NSWorkspace.shared.open(URL(fileURLWithPath: path))
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    private func openInEditor(_ bundleId: String) {
+        guard !EditorHelper.openInEditor(path: repo.path, bundleId: bundleId) else { return }
+        let name = EditorHelper.editorName(for: bundleId) ?? "That editor"
+        viewModel.reportEditorError(for: repo, message: "\(name) is not installed")
     }
 }
 
