@@ -221,10 +221,7 @@ struct SettingsView: View {
                         Spacer()
                         Picker("", selection: Binding(
                             get: { viewModel.configuration.refreshIntervalSeconds },
-                            set: {
-                                viewModel.configuration.refreshIntervalSeconds = $0
-                                viewModel.saveConfiguration()
-                            }
+                            set: { viewModel.setRefreshInterval($0) }
                         )) {
                             Text("15s").tag(15.0)
                             Text("30s").tag(30.0)

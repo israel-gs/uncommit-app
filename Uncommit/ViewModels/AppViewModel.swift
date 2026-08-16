@@ -269,6 +269,17 @@ final class AppViewModel {
         saveAndRestartMonitor()
     }
 
+    /// Changes the local poll interval. Must restart the monitor: the polling
+    /// loop reads the interval once when it starts and then sleeps on it, so
+    /// merely persisting the new value left the old cadence running until the
+    /// next app launch.
+    func setRefreshInterval(_ seconds: TimeInterval) {
+        guard configuration.refreshIntervalSeconds != seconds else { return }
+        logger.info("👤 User action: Refresh interval → \(seconds)s")
+        configuration.refreshIntervalSeconds = seconds
+        saveAndRestartMonitor()
+    }
+
     private func startMonitoring() {
         monitor.startMonitoring(
             repos: repositories,
