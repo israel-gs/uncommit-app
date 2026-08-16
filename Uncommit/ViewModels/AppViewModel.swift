@@ -11,11 +11,14 @@ final class AppViewModel {
     var watchedFolders: [WatchedFolder] = []
     var configuration: AppConfiguration = AppConfiguration()
 
-    // MARK: - Transient state (split into separate dicts so a status update
-    // for one repo doesn't invalidate observers of the repository array.)
-    var statuses: [UUID: GitRepoStatus] = [:]
-    var errors: [UUID: String] = [:]
-    var checkingRemote: Set<UUID> = []
+    // MARK: - Transient state
+    //
+    // One observable object per repo. Observation tracks dependencies per
+    // PROPERTY, so the previous `[UUID: GitRepoStatus]` dictionary made every
+    // row depend on every other row's updates. This dictionary only changes
+    // when repos are added or removed; the per-repo values live inside the
+    // RepoState objects, where a change reaches just the row that shows it.
+    private(set) var repoStates: [UUID: RepoState] = [:]
     var lastFullRefreshAt: Date?
     /// Paths reported as missing during the current refresh cycle. We collect
     /// them here and prune at end-of-cycle to avoid mutating `repositories`
@@ -60,9 +63,36 @@ final class AppViewModel {
 
     // MARK: - Per-repo accessors (used by views)
 
-    func status(for repo: GitRepository) -> GitRepoStatus? { statuses[repo.id] }
-    func error(for repo: GitRepository) -> String? { errors[repo.id] }
-    func isCheckingRemote(_ repo: GitRepository) -> Bool { checkingRemote.contains(repo.id) }
+    /// The observable state object for a repo. Views read through it, so a
+    /// status update reaches only the row that shows that repo.
+    func state(for repo: GitRepository) -> RepoState? { repoStates[repo.id] }
+
+    func status(for repo: GitRepository) -> GitRepoStatus? { repoStates[repo.id]?.status }
+    func error(for repo: GitRepository) -> String? { repoStates[repo.id]?.error }
+    func isCheckingRemote(_ repo: GitRepository) -> Bool { repoStates[repo.id]?.isCheckingRemote ?? false }
+
+    /// Creates state objects for new repos and drops the ones whose repo is
+    /// gone. Called from every path that mutates `repositories`.
+    ///
+    /// Internal rather than private so tests can populate a view model the same
+    /// way the app does, instead of reaching past this invariant.
+    func syncRepoStates() {
+        let live = Set(repositories.map(\.id))
+        for id in live where repoStates[id] == nil {
+            repoStates[id] = RepoState()
+        }
+        for id in repoStates.keys where !live.contains(id) {
+            repoStates[id] = nil
+        }
+    }
+
+    private func setCheckingRemote(_ checking: Bool, for id: UUID) {
+        repoStates[id]?.isCheckingRemote = checking
+    }
+
+    private func setError(_ message: String?, for id: UUID) {
+        repoStates[id]?.error = message
+    }
 
     /// A transient failure — a fetch with no network, a push git rejected —
     /// must not erase what we already know about the working tree. As long as
@@ -70,7 +100,7 @@ final class AppViewModel {
     /// the row as its own line. Only a repo we've never managed to read at all
     /// reports `.error`.
     func healthLevel(for repo: GitRepository) -> RepoHealthLevel {
-        statuses[repo.id]?.healthLevel ?? .error
+        repoStates[repo.id]?.healthLevel ?? .error
     }
 
     // MARK: - Computed
@@ -81,15 +111,12 @@ final class AppViewModel {
     /// unreachable remote shouldn't paint the whole menu bar red, which matters
     /// now that remote checks run on their own.
     var overallHealth: RepoHealthLevel {
-        let levels = repositories.compactMap { repo -> RepoHealthLevel? in
-            if let status = statuses[repo.id] { return status.healthLevel }
-            return errors[repo.id] != nil ? .error : nil
-        }
+        let levels = repositories.compactMap { repoStates[$0.id]?.knownHealthLevel }
         return levels.max() ?? .clean
     }
 
     var dirtyRepoCount: Int {
-        statuses.values.filter {
+        repositories.compactMap { repoStates[$0.id]?.status }.filter {
             !$0.isClean || $0.hasUnpulledChanges || $0.hasUnpushedChanges
         }.count
     }
@@ -164,6 +191,10 @@ final class AppViewModel {
         if pruned > 0 || pathsChanged {
             saveConfiguration()
         }
+
+        // Every repo needs its state object before the monitor starts
+        // reporting into it.
+        syncRepoStates()
 
         migrateIfNeeded()
 
@@ -264,8 +295,8 @@ final class AppViewModel {
                 logger.warning("⚠️ onStatusUpdate — no matching repo for path: \(path) (\(shortName))")
                 return
             }
-            self.statuses[id] = status
-            self.errors[id] = nil
+            self.repoStates[id]?.status = status
+            self.repoStates[id]?.error = nil
         }
         monitor.onError = { [weak self] path, error in
             guard let self else { return }
@@ -275,7 +306,7 @@ final class AppViewModel {
                 self.missingPaths.insert(path)
             }
             if let id = self.repoId(for: path) {
-                self.errors[id] = error
+                self.setError(error, for: id)
             }
         }
         monitor.onCycleCompleted = { [weak self] in
@@ -358,7 +389,7 @@ final class AppViewModel {
 
         // Diagnostic: report any repos still without status after a full refresh
         let stuckRepos = repositories.filter {
-            statuses[$0.id] == nil && errors[$0.id] == nil
+            repoStates[$0.id]?.status == nil && repoStates[$0.id]?.error == nil
         }
         if !stuckRepos.isEmpty {
             logger.warning("⚠️ After refreshAll, \(stuckRepos.count) repos still have no status: \(stuckRepos.map(\.displayName).joined(separator: ", "))")
@@ -367,8 +398,8 @@ final class AppViewModel {
 
     func checkRemote(for repo: GitRepository) async {
         logger.info("👤 User action: Check Remote — \(repo.displayName)")
-        checkingRemote.insert(repo.id)
-        defer { checkingRemote.remove(repo.id) }
+        setCheckingRemote(true, for: repo.id)
+        defer { setCheckingRemote(false, for: repo.id) }
         await monitor.fetchAndCheckRemote(for: repo.path)
     }
 
@@ -382,7 +413,7 @@ final class AppViewModel {
         defer { isCheckingAllRemotes = false }
 
         for repo in repositories {
-            checkingRemote.insert(repo.id)
+            setCheckingRemote(true, for: repo.id)
         }
 
         let repos = repositories
@@ -404,7 +435,7 @@ final class AppViewModel {
             // As each completes, clear its spinner and add the next repo
             for await completedPath in group {
                 if let id = self.repoId(for: completedPath) {
-                    self.checkingRemote.remove(id)
+                    self.setCheckingRemote(false, for: id)
                 }
 
                 if index < repos.count {
@@ -422,7 +453,7 @@ final class AppViewModel {
     /// Repositories that have incoming commits to fast-forward. Drives both the
     /// "Pull all" button's visibility and what `pullAll()` operates on.
     private var reposNeedingPull: [GitRepository] {
-        repositories.filter { statuses[$0.id]?.hasUnpulledChanges == true }
+        repositories.filter { repoStates[$0.id]?.status?.hasUnpulledChanges == true }
     }
 
     var reposNeedingPullCount: Int { reposNeedingPull.count }
@@ -438,7 +469,7 @@ final class AppViewModel {
         isPullingAll = true
         defer { isPullingAll = false }
 
-        for repo in targets { checkingRemote.insert(repo.id) }
+        for repo in targets { setCheckingRemote(true, for: repo.id) }
 
         let maxConcurrent = 4
         await withTaskGroup(of: (UUID, String?).self) { group in
@@ -461,11 +492,11 @@ final class AppViewModel {
             }
 
             for await (id, errMsg) in group {
-                checkingRemote.remove(id)
+                setCheckingRemote(false, for: id)
                 if let errMsg {
-                    errors[id] = errMsg
+                    setError(errMsg, for: id)
                 } else {
-                    errors[id] = nil
+                    setError(nil, for: id)
                     if let repo = repositories.first(where: { $0.id == id }) {
                         await refreshSingle(repo)
                     }
@@ -481,27 +512,27 @@ final class AppViewModel {
 
     func pull(_ repo: GitRepository) async {
         logger.info("👤 User action: Pull — \(repo.displayName)")
-        checkingRemote.insert(repo.id)
-        defer { checkingRemote.remove(repo.id) }
+        setCheckingRemote(true, for: repo.id)
+        defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.pull(at: repo.path)
-            errors[repo.id] = nil
+            setError(nil, for: repo.id)
             await refreshSingle(repo)
         } catch {
-            errors[repo.id] = error.localizedDescription
+            setError(error.localizedDescription, for: repo.id)
         }
     }
 
     func push(_ repo: GitRepository) async {
         logger.info("👤 User action: Push — \(repo.displayName)")
-        checkingRemote.insert(repo.id)
-        defer { checkingRemote.remove(repo.id) }
+        setCheckingRemote(true, for: repo.id)
+        defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.push(at: repo.path)
-            errors[repo.id] = nil
+            setError(nil, for: repo.id)
             await refreshSingle(repo)
         } catch {
-            errors[repo.id] = error.localizedDescription
+            setError(error.localizedDescription, for: repo.id)
         }
     }
 
@@ -509,27 +540,27 @@ final class AppViewModel {
     /// update`). Surfaces git's error (e.g. dirty submodule) on the repo row.
     func syncSubmodule(_ repo: GitRepository, submodule name: String) async {
         logger.info("👤 User action: Submodule update \(name) — \(repo.displayName)")
-        checkingRemote.insert(repo.id)
-        defer { checkingRemote.remove(repo.id) }
+        setCheckingRemote(true, for: repo.id)
+        defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.updateSubmodule(at: repo.path, submodule: name)
-            errors[repo.id] = nil
+            setError(nil, for: repo.id)
             await refreshSingle(repo)
         } catch {
-            errors[repo.id] = error.localizedDescription
+            setError(error.localizedDescription, for: repo.id)
         }
     }
 
     func checkout(_ repo: GitRepository, to branch: String) async {
         logger.info("👤 User action: Checkout \(branch) — \(repo.displayName)")
-        checkingRemote.insert(repo.id)
-        defer { checkingRemote.remove(repo.id) }
+        setCheckingRemote(true, for: repo.id)
+        defer { setCheckingRemote(false, for: repo.id) }
         do {
             try await GitService.checkout(at: repo.path, branch: branch)
-            errors[repo.id] = nil
+            setError(nil, for: repo.id)
             await refreshSingle(repo)
         } catch {
-            errors[repo.id] = error.localizedDescription
+            setError(error.localizedDescription, for: repo.id)
         }
     }
 
@@ -537,9 +568,9 @@ final class AppViewModel {
         let result = await GitService.fullStatus(at: repo.path)
         switch result {
         case .success(let status):
-            statuses[repo.id] = status
+            repoStates[repo.id]?.status = status
         case .failure(let err):
-            errors[repo.id] = err.localizedDescription
+            setError(err.localizedDescription, for: repo.id)
         }
     }
 
@@ -622,9 +653,7 @@ final class AppViewModel {
     }
 
     private func forgetTransientState(for id: UUID) {
-        statuses[id] = nil
-        errors[id] = nil
-        checkingRemote.remove(id)
+        repoStates[id]?.reset()
     }
 
     // MARK: - Display Mode & Grouping
@@ -736,14 +765,14 @@ final class AppViewModel {
     }
 
     func reportEditorError(for repo: GitRepository, message: String) {
-        errors[repo.id] = message
+        setError(message, for: repo.id)
         let id = repo.id
         // Auto-clear after 4s so the error doesn't linger.
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(4))
             guard let self else { return }
-            if self.errors[id] == message {
-                self.errors[id] = nil
+            if self.repoStates[id]?.error == message {
+                self.setError(nil, for: id)
             }
         }
     }
@@ -758,6 +787,7 @@ final class AppViewModel {
 
     private func saveAndRestartMonitor() {
         logger.debug("💾 Saving config & restarting monitor")
+        syncRepoStates()
         saveConfiguration()
         monitor.stopMonitoring()
         setupMonitorCallbacks()

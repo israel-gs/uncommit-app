@@ -28,6 +28,7 @@
 		84BF65B4C46CBBF5B512EAEC /* GroupedRepoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68B89ECF280321925F7EE172 /* GroupedRepoListView.swift */; };
 		9E0B375FA73F9D50A605B3BE /* EditorHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = C02A3B14B23B2C725867A36E /* EditorHelper.swift */; };
 		A8B8A56A6A582EC583FE40CA /* GitStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C7F0CF85C148806DD34F60 /* GitStatus.swift */; };
+		A96985847D75DA8657AD05A7 /* RepoState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A9F9BA8503AB84B479DF976 /* RepoState.swift */; };
 		AAB630FEABE0CDB3E3897408 /* PersistenceService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C501DB6BA90CCDDFF8407043 /* PersistenceService.swift */; };
 		C0C906ED22BDC6FDA035A3D0 /* MenuBarIconProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A0AD955AFC676AB40AFCE54 /* MenuBarIconProvider.swift */; };
 		C21F7ACC0977BC53DD5A028A /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */; };
@@ -68,6 +69,7 @@
 		57F9D5D03DBC3D6F1CDC4454 /* AppViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppViewModel.swift; sourceTree = "<group>"; };
 		5C625EE29B59596BD5DC167E /* UncommitTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = UncommitTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		68B89ECF280321925F7EE172 /* GroupedRepoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupedRepoListView.swift; sourceTree = "<group>"; };
+		6A9F9BA8503AB84B479DF976 /* RepoState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepoState.swift; sourceTree = "<group>"; };
 		7B3D6A932F2676CCD46E355D /* GitStatusParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusParserTests.swift; sourceTree = "<group>"; };
 		7E999E1E94DD69BA741C70BF /* EmptyStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyStateView.swift; sourceTree = "<group>"; };
 		871C02B9E9DD13DFF3E81F56 /* UncommitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UncommitApp.swift; sourceTree = "<group>"; };
@@ -184,6 +186,7 @@
 				4E601258A307C815AD1A86D3 /* AppConfiguration.swift */,
 				43255D19C40A05A125EC0D8A /* GitRepository.swift */,
 				35C7F0CF85C148806DD34F60 /* GitStatus.swift */,
+				6A9F9BA8503AB84B479DF976 /* RepoState.swift */,
 				EC5C76DEBFD77DFA79C6FC6B /* WatchedFolder.swift */,
 			);
 			path = Models;
@@ -291,6 +294,7 @@
 				3E40CDC99F89CF9B654ADB83 /* RepoListView.swift in Sources */,
 				F41B3525C40FE36B401C7E28 /* RepoMonitor.swift in Sources */,
 				2C23A3E188A4DD3F20AED093 /* RepoRowView.swift in Sources */,
+				A96985847D75DA8657AD05A7 /* RepoState.swift in Sources */,
 				8494643F17855F5CD0AE99DB /* SettingsView.swift in Sources */,
 				0A18CAEBE561F9222CE8F6EB /* ShellExecutor.swift in Sources */,
 				CF63EBDEAAB30E7B02FD08CB /* StatusIndicatorView.swift in Sources */,
