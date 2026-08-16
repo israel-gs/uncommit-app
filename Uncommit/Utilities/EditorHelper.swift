@@ -37,14 +37,57 @@ enum EditorHelper {
         "com.antigravity.Antigravity",
     ]
 
+    // MARK: - LaunchServices cache
+    //
+    // `urlForApplication` and `icon(forFile:)` are synchronous LaunchServices
+    // round-trips, and they were being called from inside view bodies — three
+    // per repo row, on every re-render, on the main thread. Memoizing them on
+    // the MainActor (every caller is a view or a view action) turns the repeat
+    // cost into a dictionary lookup. Misses are cached too: a missing app is
+    // the case that re-queries hardest.
+
+    @MainActor private static var appURLCache: [String: URL?] = [:]
+    @MainActor private static var iconCache: [String: NSImage] = [:]
+
+    /// Bundle URL for an installed app, or nil. Memoized.
+    @MainActor
+    static func appURL(for bundleId: String) -> URL? {
+        if let cached = appURLCache[bundleId] { return cached }
+        let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
+        appURLCache[bundleId] = url
+        return url
+    }
+
+    /// File icon for a path. Memoized.
+    @MainActor
+    static func icon(atPath path: String) -> NSImage {
+        if let cached = iconCache[path] { return cached }
+        let image = NSWorkspace.shared.icon(forFile: path)
+        iconCache[path] = image
+        return image
+    }
+
+    /// Drops the memoized lookups so newly installed (or deleted) apps are
+    /// picked up. Called whenever the editor list is rebuilt.
+    @MainActor
+    static func invalidateCaches() {
+        appURLCache.removeAll()
+        iconCache.removeAll()
+    }
+
     /// Returns editors currently installed on this Mac, sorted by name.
+    /// Re-queries LaunchServices from scratch — this is the app's refresh point
+    /// for editors installed while it was running.
+    @MainActor
     static func installedEditors() -> [InstalledApp] {
+        invalidateCaches()
+
         var result: [InstalledApp] = []
         var seenIds = Set<String>()
 
         for bundleId in knownEditorBundleIds {
             guard !seenIds.contains(bundleId) else { continue }
-            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
+            if let url = appURL(for: bundleId) {
                 let name = appName(at: url) ?? bundleId
                 result.append(InstalledApp(id: bundleId, name: name, bundleURL: url))
                 seenIds.insert(bundleId)
@@ -57,10 +100,11 @@ enum EditorHelper {
     /// Open a folder path in the given editor bundle ID.
     /// Returns `true` if the editor was found and launch was attempted, `false`
     /// if the editor isn't installed (caller should surface an error).
+    @MainActor
     @discardableResult
     static func openInEditor(path: String, bundleId: String) -> Bool {
         let folderURL = URL(fileURLWithPath: path)
-        guard let appURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
+        guard let appURL = appURL(for: bundleId) else {
             return false
         }
 
@@ -81,10 +125,9 @@ enum EditorHelper {
     }
 
     /// Display name for a bundle ID (looks up from installed apps).
+    @MainActor
     static func editorName(for bundleId: String) -> String? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            return nil
-        }
+        guard let url = appURL(for: bundleId) else { return nil }
         return appName(at: url)
     }
 
@@ -108,11 +151,10 @@ enum EditorHelper {
     }
 
     /// Returns the app icon for a given bundle ID, or nil if the app is not installed.
+    @MainActor
     static func appIcon(for bundleId: String) -> NSImage? {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) else {
-            return nil
-        }
-        return NSWorkspace.shared.icon(forFile: url.path)
+        guard let url = appURL(for: bundleId) else { return nil }
+        return icon(atPath: url.path)
     }
 
     // MARK: - Private

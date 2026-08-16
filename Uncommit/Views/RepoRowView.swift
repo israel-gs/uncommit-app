@@ -227,7 +227,10 @@ struct RepoRowView: View {
             repo: repo,
             globalDefault: viewModel.configuration.defaultEditorBundleId
         ) {
-            let installed = EditorHelper.appIcon(for: editorId) != nil
+            // Resolve once per render: this used to be three LaunchServices
+            // round-trips (icon, name, icon again) inside the row body.
+            let icon = EditorHelper.appIcon(for: editorId)
+            let installed = icon != nil
             let editorName = EditorHelper.editorName(for: editorId) ?? "editor"
             Button {
                 if !EditorHelper.openInEditor(path: repo.path, bundleId: editorId) {
@@ -237,7 +240,7 @@ struct RepoRowView: View {
                     )
                 }
             } label: {
-                if let icon = EditorHelper.appIcon(for: editorId) {
+                if let icon {
                     Image(nsImage: icon)
                         .resizable()
                         .scaledToFit()

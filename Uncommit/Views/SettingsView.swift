@@ -141,8 +141,8 @@ struct SettingsView: View {
                             .font(.callout)
                         HStack(spacing: 6) {
                             if let bundleId = viewModel.configuration.defaultEditorBundleId,
-                               let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId) {
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                               let url = EditorHelper.appURL(for: bundleId) {
+                                Image(nsImage: EditorHelper.icon(atPath: url.path))
                                     .resizable()
                                     .frame(width: 16, height: 16)
                                 Text(EditorHelper.editorName(for: bundleId) ?? bundleId)

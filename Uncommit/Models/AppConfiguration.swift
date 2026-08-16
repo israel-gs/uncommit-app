@@ -55,7 +55,9 @@ struct InstalledApp: Identifiable, Hashable {
     let name: String
     let bundleURL: URL
 
+    /// Memoized — this is read inside `ForEach` bodies that re-render often.
+    @MainActor
     var icon: NSImage {
-        NSWorkspace.shared.icon(forFile: bundleURL.path)
+        EditorHelper.icon(atPath: bundleURL.path)
     }
 }
